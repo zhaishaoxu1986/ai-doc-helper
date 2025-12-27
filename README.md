@@ -1,88 +1,116 @@
 
 # AI Doc Helper (AI 文档助手)
 
-这是一个基于 React + Vite + Gemini API 的专业文档处理工具，支持 Markdown 编辑、Word 导出、OCR 公式识别以及 AI 智能润色。
+这是一个基于 React + Vite + Gemini API 的专业文档处理工具。它集成了 Markdown 编辑器、Word 完美导出（支持 LaTeX 公式）、OCR 公式识别以及 AI 智能润色功能。
 
 ![App Screenshot](https://via.placeholder.com/800x400?text=AI+Doc+Helper+Preview)
 
 ## ✨ 核心功能
 
-*   **Markdown 编辑器**: 支持实时预览、快捷键、以及丰富的格式支持。
-*   **Word 完美导出**: 支持标准公文、学术论文、简洁笔记三种导出模板，完美还原 LaTeX 公式。
-*   **AI 智能润色**: 内置“导出预优化”、“学术化润色”、“中英文翻译”等功能，支持自定义 Prompt。
-*   **公式 OCR**: 截图粘贴即可识别数学公式为 LaTeX 代码。
-*   **多模型支持**: 兼容 Google Gemini, Alibaba Qwen, Xiaomi Mimo 等多种大模型接口。
+*   **Markdown 编辑器**: 双栏实时预览，支持丰富的快捷键。
+*   **Word 完美导出**: 自动转换 Markdown 为 docx 格式，LaTeX 公式自动转为 Word 原生公式对象。
+*   **AI 智能润色**: 内置“导出预优化”、“学术化润色”等 Prompt，支持自定义。
+*   **OCR 识别**: 截图粘贴即可识别数学公式、表格和手写笔记。
+*   **多模型支持**: 兼容 Google Gemini, Alibaba Qwen (通义千问), DeepSeek 等 OpenAI 格式接口。
+
+---
 
 ## 🚀 快速开始 (本地运行)
 
+适合开发人员或希望在本地快速体验的用户。
+
 ### 1. 环境准备
-确保你的电脑上安装了 [Node.js](https://nodejs.org/) (推荐 v18 或 v20 版本)。
+确保已安装 [Node.js](https://nodejs.org/) (推荐 v18 或 v20)。
 
 ### 2. 安装依赖
-在项目根目录下打开终端（命令行），运行：
-
 ```bash
 npm install
 ```
 
-### 3. 配置 API Key
-本项目依赖 AI 模型接口。虽然 UI 支持配置自定义 Key，但为了开发方便，建议配置环境变量：
-1. 复制 `.env.example` 文件并重命名为 `.env`。
-2. 打开 `.env` 文件，填入你的 API Key：
+### 3. 配置 API Key (可选但推荐)
+虽然你可以在网页的“用户中心”配置 Key，但为了开发方便，建议配置环境变量：
+1. 复制 `.env.example` (如果没有则新建) 为 `.env`。
+2. 填入你的 API Key：
+   ```properties
+   API_KEY=你的_sk_开头的Key
+   ```
 
-```properties
-API_KEY=你的_API_Key
-```
-
-### 4. 启动项目
-运行开发服务器：
-
+### 4. 启动服务
 ```bash
 npm run dev
 ```
-
-启动后，打开浏览器访问控制台提示的地址（通常是 `http://localhost:5173`）即可使用。
-
----
-
-## 🎨 自定义设置
-
-### 更换 Logo
-如果您想使用自己的 Logo，请将您的图片文件命名为 `logo.png`，并将其放入项目的 `public/` 文件夹中。刷新页面后，左上角的图标将自动更新。
-
-### 关于我们与隐私
-点击右上角的 **?** 按钮，可以查看关于我们、隐私政策、服务条款及常见问题。
-*   **隐私政策**: 我们坚持“客户端优先”，您的 API Key 和文档内容仅用于实时 AI 请求，不进行云端留存。
-*   **服务条款**: 工具仅供学习研究，使用者需对生成内容的准确性负责。
+浏览器访问 `http://localhost:5173` 即可使用。
 
 ---
 
-## 🛠️ 构建与部署
+## 🐳 Docker 部署 (推荐)
 
-### 构建生产版本
-如果你想测试生产环境的构建效果，或者准备部署到服务器：
+本项目支持 Docker 部署，方便在服务器或 NAS 上运行。
 
+### 方式一：直接构建运行
+
+由于项目是纯前端构建（Client-Side），API Key 会在构建时注入到代码中，或者您可以留空，在网页端“用户中心”手动填写。
+
+**1. 构建镜像**
 ```bash
-npm run build
-```
-构建产物位于 `dist` 目录。
+# 如果你想在构建时预置 Key (推荐用于私有部署)
+docker build --build-arg API_KEY=你的_sk_key -t ai-doc-helper .
 
-### 本地预览生产版本
-构建完成后，可以使用以下命令在本地预览生产版本（模拟服务器环境）：
-
-```bash
-npm run preview
+# 如果不预置 Key (用户需要在网页端自行填写)
+docker build -t ai-doc-helper .
 ```
 
+**2. 运行容器**
+```bash
+docker run -d -p 8080:80 --name ai-doc-helper ai-doc-helper
+```
+现在访问 `http://localhost:8080` 即可。
+
+### 方式二：使用 Docker Compose
+
+在项目根目录创建一个 `docker-compose.yml` 文件：
+
+```yaml
+version: '3'
+services:
+  web:
+    build:
+      context: .
+      args:
+        - API_KEY=你的_sk_key # 可选
+    ports:
+      - "8080:80"
+    container_name: ai-doc-helper
+    restart: always
+```
+
+然后运行：
+```bash
+docker-compose up -d --build
+```
+
 ---
 
-## 📂 目录结构
+## 🛠️ 技术栈
 
-- `components/`
-  - `Layout/`: 布局组件 (Header, UserCenter, **AboutModal**)
-  - `Editor/`: 编辑器核心组件
-  - `OCR/`: 公式识别组件
-  - `Preview/`: Word 预览组件
-- `utils/`: 工具函数 (Word 转换核心逻辑、AI 接口封装)
-- `types.ts`: TypeScript 类型定义
-- `vite.config.ts`: Vite 构建配置
+- **前端框架**: React 18 + TypeScript + Vite
+- **UI 库**: Tailwind CSS (排版与样式)
+- **文档处理**: 
+  - `react-markdown` + `katex`: 预览渲染
+  - `docx`: 生成 Word 文档
+  - `mammoth`: 解析 Word 文档
+- **AI 交互**: `@google/genai` (官方 SDK) + `fetch` (OpenAI 兼容接口)
+
+## ⚠️ 注意事项
+
+1.  **关于 API Key 安全**: 
+    - 本项目是纯前端应用。如果您在构建时通过环境变量注入了 `API_KEY`，该 Key 会以明文形式存在于打包后的 JS 文件中。
+    - **请勿**将包含您私有 Key 的构建产物发布到公共网络。
+    - 推荐在构建时不注入 Key，而是让使用者在网页右上角的“用户中心”填入自己的 Key（存储在本地 LocalStorage）。
+
+2.  **OCR 功能**:
+    - OCR 功能依赖具备视觉能力的模型（如 `gemini-pro-vision`, `qwen-vl-max`）。请确保您的 Key 支持视觉模型。
+
+## 📄 许可证
+
+MIT License

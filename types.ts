@@ -8,7 +8,8 @@ export enum AppView {
 export enum WordTemplate {
   STANDARD = 'standard',
   ACADEMIC = 'academic',
-  NOTE = 'note'
+  NOTE = 'note',
+  CUSTOM = 'custom'
 }
 
 export interface DocumentState {
@@ -20,4 +21,14 @@ export interface DocumentState {
 export interface OCRResult {
   latex: string;
   confidence?: number;
+}
+
+export interface DocumentStyle {
+  fontFace: string;
+  fontSize: number;
+  lineSpacing: number;
+  headingColor: string;
+  textColor: string;
+  alignment: string;
+  paragraphSpacing: number;
 }
