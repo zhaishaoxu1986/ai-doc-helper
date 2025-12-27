@@ -26,7 +26,7 @@ const WebSummarizer: React.FC = () => {
 
   const config = getModelConfig('text');
 
-  const fetchContent = async (targetUrl: string): Promise<string> {
+  const fetchContent = async (targetUrl: string): Promise<string> => {
     try {
         // Direct fetch (Might fail due to CORS)
         const res = await fetch(targetUrl);
