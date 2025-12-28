@@ -372,7 +372,7 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
   return (
     <div className="p-4 lg:p-8 max-w-[1440px] mx-auto min-h-full flex flex-col" onPaste={handlePaste}>
       <div className="text-center mb-8">
-        <h2 className="text-3xl font-extrabold text-slate-900 mb-3 tracking-tight">AI 视觉识别中心</h2>
+        <h2 className="text-3xl font-extrabold text-slate-900 mb-3 tracking-tight">AI 视觉识别中心 (AI Vision)</h2>
         
         {/* Mode Switcher */}
         <div className="flex justify-center mb-6">

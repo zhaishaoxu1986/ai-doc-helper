@@ -11,7 +11,42 @@ import { getTheme } from './utils/settings';
 const App: React.FC = () => {
   const [view, setView] = useState<AppView>(AppView.EDITOR);
   const [docState, setDocState] = useState<DocumentState>({
-    markdown: `# AI 智能文档助理使用手册\n\n这是一个专业的文档处理平台，支持将 **Markdown** 无缝转换为 **Word** 格式。\n\n### 1. 公式展示 (LaTeX)\n\n系统支持复杂的数学公式渲染，例如高斯积分：\n\n$$\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}$$\n\n### 2. 功能特性\n\n- **OCR 识别**：截图粘贴即可识别数学公式。\n- **一键排版**：自动修正中英文间距，提升专业感。\n- **导出预览**：右侧实时模拟 Word A4 纸张排版效果。\n\n### 3. 示例表格\n\n| 功能模块 | 技术选型 | 优势 |\n| :--- | :--- | :--- |\n| 文本处理 | Markdown-it | 标准化程度高 |\n| 公式识别 | Gemini 2 Flash | 多模态深度理解 |\n| 文档转换 | Docx.js | 浏览器端纯前端转换 |\n\n> 提示：点击“AI 助手”体验一键润色，支持 Ctrl+Z 撤销。`,
+    markdown: `# AI 智能文档助理使用手册
+
+这是一个专业的文档处理平台，支持将 **Markdown** 无缝转换为 **Word** 格式。
+
+### 1. 公式展示 (LaTeX)
+
+系统支持复杂的数学公式渲染，并能直接导出为 Word 原生公式对象。例如 Transformer 的核心注意力机制：
+
+$$
+\\text{Attention}(Q, K, V) = \\text{softmax}\\left(\\frac{QK^T}{\\sqrt{d_k}}\\right)V
+$$
+
+### 2. 表格支持 (Table)
+
+标准 Markdown 表格可完美转换为 Word 表格，并保持列对齐方式：
+
+| 模型 (Model) | 架构 (Architecture) | 参数 (Params) | 来源 |
+| :--- | :---: | :---: | ---: |
+| Transformer | Encoder-Decoder | 65M | Google |
+| BERT | Encoder Only | 110M/340M | Google |
+| GPT-3 | Decoder Only | 175B | OpenAI |
+| LLaMA | Decoder Only | 65B | Meta |
+
+### 3. Transformer 架构图
+
+支持图片嵌入，导出 Word 时会自动下载并嵌入文档（保持原始比例）：
+
+![Transformer Architecture](https://upload.wikimedia.org/wikipedia/commons/thumb/3/34/Transformer%2C_full_architecture.png/1280px-Transformer%2C_full_architecture.png)
+
+### 4. 功能特性
+
+- **AI 视觉**：截图粘贴即可识别数学公式、表格和手写体。
+- **一键排版**：自动修正中英文间距，提升专业感。
+- **公众号适配**：右侧预览区支持一键复制为微信公众号格式。
+
+> 提示：您可以随意更换上面的图片链接。点击“AI 助手”体验一键润色，支持 Ctrl+Z 撤销。`,
     isProcessing: false,
     progress: 0
   });
@@ -26,9 +61,7 @@ const App: React.FC = () => {
       root.style.setProperty('--primary-50', theme.light);
     };
     
-    // Listen for storage events (e.g. from UserCenter) to update theme across tabs or instantly
     window.addEventListener('storage', applyTheme);
-    // Also listen for custom event dispatched within the same window
     window.addEventListener('theme-change', applyTheme);
     
     applyTheme();
@@ -51,7 +84,6 @@ const App: React.FC = () => {
      }));
      
      if (isProcessing) {
-         // 模拟进度条
          const interval = setInterval(() => {
              setDocState(prev => {
                  if (!prev.isProcessing || prev.progress >= 90) {
@@ -98,7 +130,7 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {view === AppView.OCR && (
+        {view === AppView.AI_VISION && (
           <div className="h-full animate-in slide-in-from-bottom-4 duration-300 overflow-y-auto">
             <FormulaOCR onResult={insertAtCursor} />
           </div>

@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import mammoth from 'mammoth';
 import ReactMarkdown from 'react-markdown';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
@@ -10,11 +10,16 @@ import { Type } from '@google/genai';
 import { downloadDocx } from '../../utils/converter';
 import { WordTemplate } from '../../types';
 
-type Mode = 'rename' | 'report' | 'missing';
+// PDF & Excel Imports
+// Note: These libraries are imported via esm.sh in index.html, using 'any' to bypass TS check
+declare const pdfjsLib: any;
+declare const XLSX: any;
+
+type Mode = 'rename' | 'report' | 'missing' | 'deep_research';
 
 interface FileItem {
   file: File;
-  contentSnippet: string; // 提取的前1000个字符用于分析
+  contentSnippet: string; // 提取的前N个字符用于分析
   status: 'pending' | 'processing' | 'done' | 'error';
   newName?: string;
   reason?: string;
@@ -25,6 +30,35 @@ interface CheckResult {
   missing: string[];
   extras: string[]; // 文件存在但不在名单中
 }
+
+interface ResearchTemplate {
+    id: string;
+    title: string;
+    icon: string;
+    prompt: string;
+    isCustom?: boolean;
+}
+
+const RESEARCH_TEMPLATES: ResearchTemplate[] = [
+    {
+        id: 'paper',
+        title: '论文精读 (Paper Reading)',
+        icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253',
+        prompt: 'You are an academic research assistant. Please provide a detailed deep-dive reading report for the provided document(s).\nStructure:\n1. **Abstract & Core Contribution**: What is the main problem and solution?\n2. **Methodology**: Explain the technical approach in detail.\n3. **Experiments & Results**: Key metrics and comparison.\n4. **Critical Analysis**: Pros, cons, and limitations.\n5. **Future Work**: Potential research directions.\n\nKeep the tone academic and professional.'
+    },
+    {
+        id: 'theory',
+        title: '理论学习 (Theory Study)',
+        icon: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z',
+        prompt: 'You are a professor. Please explain the theoretical concepts found in these documents.\n1. **Concept Definition**: Define key terms clearly.\n2. **Core Principles**: Explain the "Why" and "How" behind the theory.\n3. **Examples**: Provide analogies or simple examples to illustrate complex points.\n4. **Summary**: Key takeaways for a student.'
+    },
+    {
+        id: 'code',
+        title: '代码/功能分析 (Code Analysis)',
+        icon: 'M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4',
+        prompt: 'You are a senior software engineer. Analyze the provided code or technical design docs.\n1. **Architecture Overview**: High-level structure.\n2. **Key Functions**: Explain the most important classes/functions.\n3. **Logic Flow**: How data moves through the system.\n4. **Suggestions**: Potential improvements or bugs.'
+    }
+];
 
 const DEFAULT_RENAME_PROMPT = `Analyze the provided file contents to extract key metadata: Date, Author, Assignment Batch (e.g., "First Assignment", "第X次作业"), and Topic/Content.
 Goal: Rename these files exactly matching the target naming pattern provided.
@@ -70,6 +104,16 @@ const MultiDocProcessor: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [resultReport, setResultReport] = useState<string>('');
   
+  // Research Mode
+  const [templates, setTemplates] = useState<ResearchTemplate[]>(RESEARCH_TEMPLATES);
+  const [activeTemplate, setActiveTemplate] = useState<ResearchTemplate>(RESEARCH_TEMPLATES[0]);
+  const [customPrompt, setCustomPrompt] = useState(RESEARCH_TEMPLATES[0].prompt);
+  
+  // Custom Template Creation
+  const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
+  const [newTemplateTitle, setNewTemplateTitle] = useState('');
+  const [newTemplatePrompt, setNewTemplatePrompt] = useState('');
+
   // Roster State for Missing Mode
   const [rosterText, setRosterText] = useState('');
   const [checkResult, setCheckResult] = useState<CheckResult | null>(null);
@@ -90,49 +134,136 @@ const MultiDocProcessor: React.FC = () => {
 
   const config = getModelConfig('text');
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const newFiles: FileItem[] = [];
-      for (let i = 0; i < e.target.files.length; i++) {
-        const file = e.target.files[i];
-        let contentSnippet = '';
-        
+  // Load Custom Templates on Mount
+  useEffect(() => {
+    const savedTemplates = localStorage.getItem('custom_research_templates');
+    if (savedTemplates) {
         try {
+            const parsed = JSON.parse(savedTemplates);
+            setTemplates([...RESEARCH_TEMPLATES, ...parsed]);
+        } catch (e) {
+            console.error("Failed to load custom templates", e);
+        }
+    }
+  }, []);
+
+  const handleCreateTemplate = () => {
+      if (!newTemplateTitle.trim() || !newTemplatePrompt.trim()) {
+          alert("请输入标题和 Prompt");
+          return;
+      }
+      const newTpl: ResearchTemplate = {
+          id: `custom-${Date.now()}`,
+          title: newTemplateTitle.trim(),
+          prompt: newTemplatePrompt.trim(),
+          icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z', // Generic icon
+          isCustom: true
+      };
+      const updatedTemplates = [...templates, newTpl];
+      setTemplates(updatedTemplates);
+      localStorage.setItem('custom_research_templates', JSON.stringify(updatedTemplates.filter(t => t.isCustom)));
+      
+      setIsCreatingTemplate(false);
+      setNewTemplateTitle('');
+      setNewTemplatePrompt('');
+      
+      // Auto select
+      setActiveTemplate(newTpl);
+      setCustomPrompt(newTpl.prompt);
+  };
+
+  const handleDeleteTemplate = (id: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!confirm("确定要删除这个自定义模板吗？")) return;
+
+      const updatedTemplates = templates.filter(t => t.id !== id);
+      setTemplates(updatedTemplates);
+      localStorage.setItem('custom_research_templates', JSON.stringify(updatedTemplates.filter(t => t.isCustom)));
+
+      if (activeTemplate.id === id) {
+          setActiveTemplate(updatedTemplates[0]);
+          setCustomPrompt(updatedTemplates[0].prompt);
+      }
+  };
+
+  // Unified File Parsing Logic
+  const parseFile = async (file: File): Promise<string> => {
+      try {
           if (file.name.endsWith('.docx')) {
             const arrayBuffer = await file.arrayBuffer();
             const result = await mammoth.extractRawText({ arrayBuffer });
-            contentSnippet = result.value.substring(0, 1000); // 提取前1000字
-          } else {
-            const text = await file.text();
-            contentSnippet = text.substring(0, 1000);
-          }
-        } catch (err) {
-          console.error(`Error reading file ${file.name}`, err);
-          contentSnippet = "(Error reading file content)";
-        }
+            return result.value;
+          } else if (file.name.endsWith('.pdf')) {
+             if (typeof pdfjsLib === 'undefined') return "[Error: PDF parser not loaded]";
+             
+             // Setup worker manually if using CDN import without bundler
+             if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+                 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
+             }
 
-        newFiles.push({ file, contentSnippet, status: 'pending' });
+             const arrayBuffer = await file.arrayBuffer();
+             const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+             const pdf = await loadingTask.promise;
+             let fullText = '';
+             // Limit to first 15 pages to avoid OOM on client side for large docs
+             const maxPages = Math.min(pdf.numPages, 15); 
+             for (let i = 1; i <= maxPages; i++) {
+                 const page = await pdf.getPage(i);
+                 const textContent = await page.getTextContent();
+                 const pageText = textContent.items.map((item: any) => item.str).join(' ');
+                 fullText += `--- Page ${i} ---\n${pageText}\n`;
+             }
+             return fullText;
+          } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+             if (typeof XLSX === 'undefined') return "[Error: Excel parser not loaded]";
+             const arrayBuffer = await file.arrayBuffer();
+             const workbook = XLSX.read(arrayBuffer);
+             let fullText = '';
+             workbook.SheetNames.forEach((sheetName: string) => {
+                 const sheet = workbook.Sheets[sheetName];
+                 // Sheet to CSV is token efficient
+                 const csv = XLSX.utils.sheet_to_csv(sheet);
+                 fullText += `--- Sheet: ${sheetName} ---\n${csv}\n`;
+             });
+             return fullText;
+          } else {
+            // Treat as text (txt, md, py, js, etc.)
+            return await file.text();
+          }
+      } catch (err) {
+          console.error("Parse Error", err);
+          return `[Error parsing file: ${file.name}]`;
+      }
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const newFiles: FileItem[] = [];
+      const isDeepResearch = mode === 'deep_research';
+
+      for (let i = 0; i < e.target.files.length; i++) {
+        const file = e.target.files[i];
+        
+        // Parse content
+        const content = await parseFile(file);
+        
+        // Truncate based on mode
+        // Deep research needs more context (e.g. 50k chars), others just need a snippet (1k chars)
+        const limit = isDeepResearch ? 50000 : 1000;
+        const snippet = content.substring(0, limit);
+
+        newFiles.push({ file, contentSnippet: snippet, status: 'pending' });
       }
       setFiles(prev => [...prev, ...newFiles]);
     }
-    // Reset input to allow re-selection
     if (e.target) e.target.value = '';
   };
 
   const handleRosterImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-
       try {
-          let text = '';
-          if (file.name.endsWith('.docx')) {
-              const arrayBuffer = await file.arrayBuffer();
-              const result = await mammoth.extractRawText({ arrayBuffer });
-              text = result.value;
-          } else {
-              text = await file.text();
-          }
-          // Simple cleanup: remove empty lines
+          const text = await parseFile(file);
           const cleanList = text.split(/\r?\n/).map(l => l.trim()).filter(l => l).join('\n');
           setRosterText(cleanList);
       } catch (err) {
@@ -181,20 +312,56 @@ const MultiDocProcessor: React.FC = () => {
         // 设置一个花名册
         setRosterText("孙悟空\n猪八戒\n沙悟净\n唐三藏\n白龙马");
         
-        // 模拟提交的文件：有人交了，有人没交，有人名字写得不规范
+        // 模拟提交的文件
         samples = [
             { name: "作业_孙悟空.docx", text: "这是孙悟空的作业。" },
             { name: "八戒的检讨书.docx", text: "检讨人：猪八戒\n内容：我错了..." }, 
             { name: "卷帘大将_报告.docx", text: "姓名：沙悟净\n职务：卷帘大将\n汇报..." },
             { name: "UNKNOWN_FILE.docx", text: "没有写名字的神秘文件..." }
         ];
-        // 预期：唐三藏、白龙马 未交
+    } else if (mode === 'deep_research') {
+        // Deep Research Samples - Based on Active Template
+        if (activeTemplate.id === 'paper') {
+            samples = [
+                { name: "Paper_Attention_Is_All_You_Need.txt", text: "Abstract\nThe dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely..." },
+                { name: "Notes_Transformer_Arch.txt", text: "Self-Attention Mechanism:\nQueries, Keys, Values.\nScaled Dot-Product Attention = softmax(QK^T / sqrt(d_k))V.\nMulti-Head Attention allows the model to jointly attend to information from different representation subspaces." }
+            ];
+        } else if (activeTemplate.id === 'theory') {
+             samples = [
+                { name: "Quantum_Mechanics_Intro.txt", text: "The Schrödinger equation is a linear partial differential equation that governs the wave function of a quantum-mechanical system.\n\nConcept 1: Wave-Particle Duality\nEvery particle or quantum entity may be described as either a particle or a wave." },
+                { name: "Relativity_Notes.docx", text: "Special relativity is a theory of the structure of spacetime. It was introduced in Einstein's 1905 paper 'On the Electrodynamics of Moving Bodies'." }
+            ];
+        } else if (activeTemplate.id === 'code') {
+             samples = [
+                { name: "server.py", text: "from flask import Flask, jsonify\napp = Flask(__name__)\n\n@app.route('/api/data')\ndef get_data():\n    return jsonify({'status': 'ok', 'data': [1, 2, 3]})\n\nif __name__ == '__main__':\n    app.run(debug=True)" },
+                { name: "App.js", text: "import React from 'react';\n\nfunction App() {\n  return (\n    <div className=\"App\">\n      <h1>Hello World</h1>\n    </div>\n  );\n}\n\nexport default App;" }
+            ];
+        } else {
+            // Custom or default
+             samples = [
+                { name: "Research_Material_1.txt", text: "This is a sample document for research analysis." },
+                { name: "Research_Material_2.txt", text: "Additional context and data points for the topic." }
+            ];
+        }
     }
 
     const newFiles: FileItem[] = [];
     for (const s of samples) {
-        const blob = await createDocxBlob(s.text);
-        const file = new File([blob], s.name, { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+        let blob;
+        // If name implies docx, create docx blob, otherwise text/plain
+        if (s.name.endsWith('.docx')) {
+            blob = await createDocxBlob(s.text);
+        } else {
+            blob = new Blob([s.text], { type: 'text/plain' });
+        }
+        
+        // Infer mime type
+        const type = s.name.endsWith('.docx') 
+            ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
+            : 'text/plain';
+
+        const file = new File([blob], s.name, { type });
+        
         newFiles.push({
             file: file,
             contentSnippet: s.text,
@@ -210,6 +377,8 @@ const MultiDocProcessor: React.FC = () => {
     setCheckResult(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  // --- Process Functions ---
 
   const processRename = async () => {
     if (files.length === 0) return;
@@ -278,12 +447,10 @@ const MultiDocProcessor: React.FC = () => {
       setCheckResult(null);
 
       try {
-          // Clean roster
           const rosterList = rosterText.split(/\n|,|，/).map(s => s.trim()).filter(s => s);
-          
           const fileInputs = files.map(f => ({
               fileName: f.file.name,
-              snippet: f.contentSnippet.replace(/\n/g, ' ').substring(0, 200) // Small snippet to help identify name
+              snippet: f.contentSnippet.replace(/\n/g, ' ').substring(0, 200)
           }));
 
           const prompt = `${missingPrompt}\n\nClass Roster:\n${JSON.stringify(rosterList)}\n\nSubmitted Files:\n${JSON.stringify(fileInputs)}`;
@@ -316,6 +483,40 @@ const MultiDocProcessor: React.FC = () => {
       }
   };
 
+  const processDeepResearch = async () => {
+      if (files.length === 0) return;
+      setIsProcessing(true);
+      setResultReport('');
+      
+      try {
+          // Combine all file contents
+          let combinedDocs = '';
+          files.forEach((f, i) => {
+              combinedDocs += `\n\n=== DOCUMENT ${i+1}: ${f.file.name} ===\n${f.contentSnippet}\n`;
+          });
+
+          const prompt = `${customPrompt}\n\nDocuments to Analyze:\n${combinedDocs}`;
+          
+          const response = await generateContent({
+              apiKey: config.apiKey,
+              model: config.model,
+              baseUrl: config.baseUrl,
+              prompt: prompt
+          });
+          
+          setResultReport(response);
+          setFiles(prev => prev.map(f => ({ ...f, status: 'done' })));
+
+      } catch (e) {
+          console.error(e);
+          alert("深度调研生成失败，请检查文档大小或 API 配额。");
+      } finally {
+          setIsProcessing(false);
+      }
+  };
+
+  // --- Downloads ---
+
   const handleDownloadFile = (fileItem: FileItem) => {
     const fileName = (fileItem.status === 'done' && fileItem.newName) ? fileItem.newName : fileItem.file.name;
     const url = URL.createObjectURL(fileItem.file);
@@ -333,16 +534,13 @@ const MultiDocProcessor: React.FC = () => {
       const zip = new JSZip();
       let hasFiles = false;
       files.forEach(f => {
-          // 只下载有文件内容的
           if (f.file) {
               const fileName = (f.status === 'done' && f.newName) ? f.newName : f.file.name;
               zip.file(fileName, f.file);
               hasFiles = true;
           }
       });
-      
       if (!hasFiles) return;
-
       const content = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(content);
       const a = document.createElement('a');
@@ -356,13 +554,16 @@ const MultiDocProcessor: React.FC = () => {
 
   const handleDownloadReport = async () => {
       if (!resultReport) return;
-      await downloadDocx(resultReport, WordTemplate.STANDARD);
+      // Deep Research 默认使用学术模板，普通周报使用标准模板
+      const tpl = mode === 'deep_research' ? WordTemplate.ACADEMIC : WordTemplate.STANDARD;
+      await downloadDocx(resultReport, tpl);
   };
 
   const openSettings = () => {
       if (mode === 'rename') setTempPrompt(renamePrompt);
       else if (mode === 'report') setTempPrompt(reportPrompt);
-      else setTempPrompt(missingPrompt);
+      else if (mode === 'missing') setTempPrompt(missingPrompt);
+      else setTempPrompt(customPrompt); // Deep research custom prompt
       setShowSettings(true);
   };
 
@@ -373,9 +574,20 @@ const MultiDocProcessor: React.FC = () => {
       } else if (mode === 'report') {
           setReportPrompt(tempPrompt);
           localStorage.setItem('prompt_report', tempPrompt);
-      } else {
+      } else if (mode === 'missing') {
           setMissingPrompt(tempPrompt);
           localStorage.setItem('prompt_missing', tempPrompt);
+      } else {
+          // For deep research, we update the current active template's prompt locally in state if needed, 
+          // but usually 'customPrompt' tracks the prompt for the current session/template.
+          // If it's a custom template, we might want to persist it.
+          setCustomPrompt(tempPrompt);
+          // If it is a custom template, update it in storage
+          if (activeTemplate.isCustom) {
+               const updatedTemplates = templates.map(t => t.id === activeTemplate.id ? { ...t, prompt: tempPrompt } : t);
+               setTemplates(updatedTemplates);
+               localStorage.setItem('custom_research_templates', JSON.stringify(updatedTemplates.filter(t => t.isCustom)));
+          }
       }
       setShowSettings(false);
   };
@@ -383,12 +595,14 @@ const MultiDocProcessor: React.FC = () => {
   const getActionName = () => {
       if (mode === 'rename') return '开始生成文件名';
       if (mode === 'report') return '开始合并周报';
+      if (mode === 'deep_research') return '生成深度报告';
       return '开始核对名单';
   };
 
   const runProcess = () => {
       if (mode === 'rename') processRename();
       else if (mode === 'report') processReport();
+      else if (mode === 'deep_research') processDeepResearch();
       else processCheckMissing();
   };
 
@@ -396,29 +610,36 @@ const MultiDocProcessor: React.FC = () => {
     <div className="p-6 lg:p-12 max-w-[1440px] mx-auto min-h-full flex flex-col">
       <div className="text-center mb-8">
         <h2 className="text-3xl font-extrabold text-slate-900 mb-2">多文档智能处理</h2>
-        <p className="text-slate-500">批量命名整理 • 团队周报聚合 • 作业查缺补漏</p>
+        <p className="text-slate-500">批量命名整理 • 团队周报聚合 • Deep Research 深度分析</p>
       </div>
 
       {/* Mode Switcher */}
-      <div className="flex justify-center mb-8">
-        <div className="bg-slate-100 p-1 rounded-xl flex space-x-1 shadow-inner">
+      <div className="flex justify-center mb-8 overflow-x-auto">
+        <div className="bg-slate-100 p-1 rounded-xl flex space-x-1 shadow-inner shrink-0">
           <button
             onClick={() => { setMode('rename'); clearFiles(); }}
-            className={`px-4 lg:px-6 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'rename' ? 'bg-white text-[var(--primary-color)] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${mode === 'rename' ? 'bg-white text-[var(--primary-color)] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
             📂 智能重命名
           </button>
           <button
             onClick={() => { setMode('report'); clearFiles(); }}
-            className={`px-4 lg:px-6 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'report' ? 'bg-white text-[var(--primary-color)] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${mode === 'report' ? 'bg-white text-[var(--primary-color)] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
             📊 周报整合
           </button>
           <button
             onClick={() => { setMode('missing'); clearFiles(); }}
-            className={`px-4 lg:px-6 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'missing' ? 'bg-white text-rose-500 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${mode === 'missing' ? 'bg-white text-rose-500 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
-            📋 谁没交？(查缺)
+            📋 查缺补漏
+          </button>
+           <button
+            onClick={() => { setMode('deep_research'); clearFiles(); }}
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap flex items-center ${mode === 'deep_research' ? 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+            Deep Research
           </button>
         </div>
       </div>
@@ -429,12 +650,13 @@ const MultiDocProcessor: React.FC = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
             <div>
                 <h3 className="text-xl font-bold text-slate-800">
-                    {mode === 'rename' ? '文件批量重命名' : mode === 'report' ? '多文档内容聚合' : '作业提交核对'}
+                    {mode === 'rename' ? '文件批量重命名' : mode === 'report' ? '多文档内容聚合' : mode === 'deep_research' ? '深度文档调研' : '作业提交核对'}
                 </h3>
                 <p className="text-sm text-slate-500 mt-1">
                     {mode === 'rename' && '上传多个命名混乱的文件，AI 将根据内容自动生成规范文件名。'}
                     {mode === 'report' && '上传多个成员的周报/文档，AI 将提取关键信息生成汇总报告。'}
                     {mode === 'missing' && '输入应交名单并上传文件，AI 自动核对谁还没交作业。'}
+                    {mode === 'deep_research' && '支持 PDF/Word/Excel/代码，智能生成学术级调研报告或分析文档。'}
                 </p>
             </div>
             <div className="flex space-x-3 w-full md:w-auto">
@@ -452,7 +674,7 @@ const MultiDocProcessor: React.FC = () => {
                     <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                     添加文件
                  </button>
-                 <input type="file" multiple ref={fileInputRef} className="hidden" onChange={handleFileSelect} accept=".docx,.txt,.md" />
+                 <input type="file" multiple ref={fileInputRef} className="hidden" onChange={handleFileSelect} accept={mode === 'deep_research' ? ".pdf,.docx,.xlsx,.xls,.txt,.md,.py,.js,.java,.c,.cpp" : ".docx,.txt,.md"} />
             </div>
         </div>
 
@@ -461,7 +683,42 @@ const MultiDocProcessor: React.FC = () => {
             {/* Left/Top Area: Inputs */}
             <div className={`flex-1 flex flex-col ${mode === 'missing' ? 'lg:w-1/3 lg:flex-none' : 'w-full'}`}>
                 
-                {/* 1. Missing Mode: Roster Input */}
+                {/* 1. Deep Research: Template Selection */}
+                {mode === 'deep_research' && (
+                    <div className="mb-6">
+                        <div className="grid grid-cols-3 gap-3">
+                            {templates.map(t => (
+                                <button
+                                    key={t.id}
+                                    onClick={() => { setActiveTemplate(t); setCustomPrompt(t.prompt); clearFiles(); }}
+                                    className={`relative flex flex-col items-center justify-center p-3 rounded-xl border transition-all ${activeTemplate.id === t.id ? 'bg-purple-50 border-purple-500 text-purple-700 ring-1 ring-purple-500' : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-500'}`}
+                                >
+                                    <svg className="w-6 h-6 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={t.icon} /></svg>
+                                    <span className="text-xs font-bold text-center">{t.title}</span>
+                                    
+                                    {t.isCustom && (
+                                        <div 
+                                            onClick={(e) => handleDeleteTemplate(t.id, e)}
+                                            className="absolute top-1 right-1 text-slate-300 hover:text-red-500 p-1"
+                                        >
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                        </div>
+                                    )}
+                                </button>
+                            ))}
+                            {/* Create New Template Button */}
+                            <button
+                                onClick={() => setIsCreatingTemplate(true)}
+                                className="flex flex-col items-center justify-center p-3 rounded-xl border border-dashed border-slate-300 bg-white text-slate-400 hover:border-[var(--primary-color)] hover:text-[var(--primary-color)] hover:bg-[var(--primary-50)] transition-all"
+                            >
+                                <svg className="w-6 h-6 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                                <span className="text-xs font-bold">新建功能...</span>
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* 2. Missing Mode: Roster Input */}
                 {mode === 'missing' && (
                     <div className="mb-6 bg-rose-50 p-4 rounded-xl border border-rose-100 flex-1 flex flex-col">
                         <div className="flex justify-between items-center mb-2">
@@ -484,7 +741,7 @@ const MultiDocProcessor: React.FC = () => {
                     </div>
                 )}
 
-                {/* 2. Rename Mode: Format Input */}
+                {/* 3. Rename Mode: Format Input */}
                 {mode === 'rename' && (
                     <div className="mb-6 bg-[var(--primary-50)] p-4 rounded-xl border border-[var(--primary-color)] border-opacity-30">
                         <div className="flex flex-col space-y-2">
@@ -512,7 +769,7 @@ const MultiDocProcessor: React.FC = () => {
                     </div>
                 )}
 
-                {/* 3. File List Area */}
+                {/* 4. File List Area */}
                 {files.length > 0 ? (
                     <div className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden flex-1 flex flex-col">
                         <div className="p-3 bg-slate-100 border-b border-slate-200 font-bold text-xs text-slate-500 flex justify-between">
@@ -544,7 +801,7 @@ const MultiDocProcessor: React.FC = () => {
                     <div className="flex-1 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center text-slate-400 min-h-[200px] group hover:border-[var(--primary-color)] hover:bg-[var(--primary-50)] transition-all relative">
                          <div className="absolute inset-0 cursor-pointer" onClick={() => fileInputRef.current?.click()}></div>
                          <svg className="w-10 h-10 mb-2 opacity-50 group-hover:text-[var(--primary-color)] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                         <span className="text-xs">点击上传文件</span>
+                         <span className="text-xs">点击上传文件 {mode === 'deep_research' ? '(支持 PDF, Docx, Excel, Code)' : ''}</span>
                          
                          <button 
                             onClick={(e) => { e.stopPropagation(); loadSampleFiles(); }}
@@ -563,13 +820,13 @@ const MultiDocProcessor: React.FC = () => {
                         className={`w-full py-3 rounded-xl font-bold text-white shadow-lg transition-all ${
                             files.length === 0 || isProcessing || (mode === 'missing' && !rosterText.trim())
                             ? 'bg-slate-300 cursor-not-allowed' 
+                            : mode === 'deep_research' ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:scale-105'
                             : 'bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] hover:scale-105'
                         }`}
                     >
                         {isProcessing ? 'AI 正在分析...' : getActionName()}
                     </button>
 
-                    {/* NEW: Batch Download Button for Rename Mode */}
                     {mode === 'rename' && files.some(f => f.status === 'done') && (
                         <button
                             onClick={handleDownloadAll}
@@ -584,7 +841,7 @@ const MultiDocProcessor: React.FC = () => {
             </div>
 
             {/* Right/Bottom Area: Results */}
-            {(mode === 'missing' || mode === 'report') && (
+            {(mode === 'missing' || mode === 'report' || mode === 'deep_research') && (
                 <div className="flex-[2] flex flex-col min-h-[400px]">
                     {mode === 'missing' && (
                         <div className="h-full bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col shadow-sm">
@@ -642,7 +899,7 @@ const MultiDocProcessor: React.FC = () => {
                                         </div>
                                     </div>
 
-                                    {/* Extras Column (Full width if needed, or part of grid) */}
+                                    {/* Extras Column */}
                                     {checkResult.extras.length > 0 && (
                                         <div className="md:col-span-2 border border-slate-200 bg-slate-50 rounded-xl overflow-hidden mt-2">
                                             <div className="bg-slate-200/50 px-4 py-2 text-slate-600 font-bold text-xs uppercase tracking-wide">
@@ -664,11 +921,10 @@ const MultiDocProcessor: React.FC = () => {
                         </div>
                     )}
 
-                    {mode === 'report' && resultReport && (
+                    {(mode === 'report' || mode === 'deep_research') && resultReport && (
                         <div className="h-full bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col shadow-sm">
-                             {/* Report Header with Download */}
                              <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
-                                 <h4 className="font-bold text-slate-700">周报汇总 (Aggregated Report)</h4>
+                                 <h4 className="font-bold text-slate-700">{mode === 'deep_research' ? '深度调研报告' : '周报汇总'}</h4>
                                  <button 
                                     onClick={handleDownloadReport}
                                     className="text-xs bg-white border border-slate-300 hover:border-[var(--primary-color)] hover:text-[var(--primary-color)] px-3 py-1.5 rounded-lg font-bold transition-all shadow-sm flex items-center"
@@ -685,7 +941,7 @@ const MultiDocProcessor: React.FC = () => {
                         </div>
                     )}
                     
-                    {mode === 'report' && !resultReport && (
+                    {(mode === 'report' || mode === 'deep_research') && !resultReport && (
                          <div className="h-full flex flex-col items-center justify-center text-slate-300 border border-slate-200 border-dashed rounded-xl">
                             <svg className="w-16 h-16 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                             <p className="text-sm">生成的报告将显示在这里</p>
@@ -697,13 +953,13 @@ const MultiDocProcessor: React.FC = () => {
 
       </div>
 
-      {/* Settings Modal */}
+      {/* Settings Modal (Reused for Config) */}
       {showSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-sm">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-200">
                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
                     <h3 className="font-bold text-slate-800 text-lg">
-                        配置 Prompt ({mode === 'rename' ? '智能重命名' : mode === 'report' ? '周报整合' : '名单核对'})
+                        配置 Prompt ({mode === 'rename' ? '智能重命名' : mode === 'report' ? '周报整合' : mode === 'deep_research' ? '深度调研' : '名单核对'})
                     </h3>
                     <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-slate-600">
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -734,6 +990,55 @@ const MultiDocProcessor: React.FC = () => {
                 </div>
             </div>
         </div>
+      )}
+
+      {/* Create Template Modal */}
+      {isCreatingTemplate && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-200">
+                <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                    <h3 className="font-bold text-slate-800 text-lg">新建调研功能</h3>
+                    <button onClick={() => setIsCreatingTemplate(false)} className="text-slate-400 hover:text-slate-600">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+                <div className="p-6 space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">功能名称 (Title)</label>
+                        <input 
+                            type="text"
+                            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none bg-white"
+                            placeholder="例如：财报分析"
+                            value={newTemplateTitle}
+                            onChange={(e) => setNewTemplateTitle(e.target.value)}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">指令 (Prompt)</label>
+                        <textarea 
+                            className="w-full h-40 p-3 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none resize-none font-mono bg-slate-50 text-slate-700"
+                            placeholder="告诉 AI 应该如何分析上传的文档..."
+                            value={newTemplatePrompt}
+                            onChange={(e) => setNewTemplatePrompt(e.target.value)}
+                        ></textarea>
+                    </div>
+                    <div className="mt-4 flex justify-end space-x-2 pt-2">
+                        <button 
+                            onClick={() => setIsCreatingTemplate(false)}
+                            className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                        >
+                            取消
+                        </button>
+                        <button 
+                            onClick={handleCreateTemplate}
+                            className="px-6 py-2 text-xs font-bold text-white bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] rounded-lg shadow-sm transition-colors"
+                        >
+                            创建功能
+                        </button>
+                    </div>
+                </div>
+            </div>
+          </div>
       )}
     </div>
   );

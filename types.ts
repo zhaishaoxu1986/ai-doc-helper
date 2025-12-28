@@ -1,7 +1,7 @@
 
 export enum AppView {
   EDITOR = 'editor',
-  OCR = 'ocr',
+  AI_VISION = 'ai_vision', // Renamed from OCR
   MULTI_DOC = 'multi_doc'
 }
 

@@ -192,7 +192,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ value, onChange, onProc
     { label: 'B', action: () => insertText('**', '**') },
     { label: 'Math', action: () => insertText('$$', '$$') },
     { label: 'Code', action: () => insertText('```\n', '\n```') },
-    { label: 'Table', action: () => insertText('| Header | Header |\n| --- | --- |\n| Cell | Cell |\n') },
+    { label: 'Img', action: () => insertText('![alt](', ')') }, 
   ];
 
   const runAiTool = async (tool: Tool) => {
@@ -258,6 +258,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ value, onChange, onProc
       }
     };
     reader.readAsArrayBuffer(file);
+    if(fileInputRef.current) fileInputRef.current.value = '';
   };
 
   // 获取当前配置用于 UI 显示

@@ -33,15 +33,15 @@ const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
                 )}
               </div>
               <h3 className="text-xl font-bold text-slate-900">AI Doc Helper</h3>
-              <p className="text-slate-500 text-sm">V1.4.1 Professional</p>
+              <p className="text-slate-500 text-sm">V1.5.0 Professional</p>
             </div>
             <p className="text-slate-600 leading-relaxed text-sm">
-              AI Doc Helper 是一个专注于学术与专业文档处理的智能助手。我们致力于通过先进的人工智能技术，解决 Markdown 到 Word 转换过程中的排版痛点，提供公式识别、格式清洗及学术润色服务。
+              AI Doc Helper 是一个专注于学术与专业文档处理的智能助手。我们致力于通过先进的人工智能技术，解决 Markdown 到 Word 转换过程中的排版痛点，提供公式识别、格式清洗、学术润色以及微信公众号一键排版服务。
             </p>
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mt-4">
               <h4 className="font-bold text-slate-800 text-sm mb-2">开发者寄语</h4>
               <p className="text-slate-500 text-xs italic">
-                "省下来的时间可以喝杯咖啡"
+                "让写作回归内容本身，排版交给 AI。"
               </p>
             </div>
             
@@ -66,10 +66,28 @@ const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
         return (
           <div className="space-y-4 animate-in fade-in duration-300 h-[300px] overflow-y-auto custom-scrollbar pr-2">
             <h3 className="text-lg font-bold text-slate-900">隐私政策 (Privacy Policy)</h3>
-            <div className="text-sm text-slate-600 space-y-3">
-              <p><strong>1. 数据存储</strong><br/>本应用是一个“客户端优先”的应用。您的 API Key 仅存储在您本地浏览器的 LocalStorage 中，不会上传至我们的服务器。</p>
-              <p><strong>2. 文档内容</strong><br/>您上传或编辑的文档内容，仅在您发起 AI 请求时，会直接发送至相应的 AI 服务提供商（如 Google Gemini、阿里云等），我们不会在中间服务器留存副本。</p>
-              <p><strong>3. 第三方服务</strong><br/>使用本服务即代表您同意 Google Gemini 或您选择的其他模型提供商的服务条款。</p>
+            <p className="text-xs text-slate-500 mb-4">生效日期：2024年1月1日</p>
+            
+            <div className="text-sm text-slate-600 space-y-4">
+              <section>
+                <h4 className="font-bold text-slate-800 mb-1">1. 数据的收集与存储</h4>
+                <p>AI Doc Helper 严格遵循“本地优先”原则。您的 API Key 仅加密存储于您本地浏览器的 `LocalStorage` 中，绝不会上传至我们的服务器。所有文档处理（转换、预览）均在浏览器端（Client-side）完成。</p>
+              </section>
+
+              <section>
+                <h4 className="font-bold text-slate-800 mb-1">2. AI 交互数据</h4>
+                <p>当您使用 AI 润色、OCR 识别等功能时，相关文本或图片数据将直接发送至您选择的第三方模型服务商（如 Google Gemini、阿里云 DashScope 等）。我们作为工具提供方，不拦截、不存储、不训练您的任何业务数据。</p>
+              </section>
+
+              <section>
+                <h4 className="font-bold text-slate-800 mb-1">3. 第三方服务</h4>
+                <p>本应用依赖第三方大模型 API。使用本服务即代表您知悉并同意相关模型提供商的数据隐私协议。请勿上传涉及国家安全、商业机密或个人隐私的敏感信息。</p>
+              </section>
+              
+              <section>
+                 <h4 className="font-bold text-slate-800 mb-1">4. Cookies 使用</h4>
+                 <p>本站仅使用必要的 LocalStorage 来保存您的主题偏好和配置信息，不使用 Cookie 进行广告追踪。</p>
+              </section>
             </div>
           </div>
         );
@@ -77,10 +95,27 @@ const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
         return (
           <div className="space-y-4 animate-in fade-in duration-300 h-[300px] overflow-y-auto custom-scrollbar pr-2">
             <h3 className="text-lg font-bold text-slate-900">服务条款 (Terms of Service)</h3>
-            <div className="text-sm text-slate-600 space-y-3">
-              <p><strong>1. 使用许可</strong><br/>本工具仅供个人学习和非商业用途使用。禁止利用本工具生成违反法律法规的内容。</p>
-              <p><strong>2. 免责声明</strong><br/>AI 生成的内容可能存在误差（幻觉），使用者应对最终文档内容的准确性负责。开发者不对因使用本工具导致的任何直接或间接损失负责。</p>
-              <p><strong>3. 服务变更</strong><br/>我们保留随时修改或中断服务的权利，恕不另行通知。</p>
+            
+            <div className="text-sm text-slate-600 space-y-4">
+              <section>
+                  <h4 className="font-bold text-slate-800 mb-1">1. 接受条款</h4>
+                  <p>访问和使用 AI Doc Helper 即表示您同意遵守本条款。如果您不同意，请立即停止使用。</p>
+              </section>
+
+              <section>
+                  <h4 className="font-bold text-slate-800 mb-1">2. 使用许可与限制</h4>
+                  <p>本工具提供给个人学习、科研及非商业用途免费使用。您承诺不利用本工具生成、传播任何违反法律法规、社会公德或侵犯他人权益的内容（包括但不限于色情、暴力、政治敏感信息）。</p>
+              </section>
+
+              <section>
+                  <h4 className="font-bold text-slate-800 mb-1">3. 免责声明</h4>
+                  <p>AI 生成内容具有随机性（幻觉），仅供参考。开发者不对 AI 生成内容的准确性、完整性负责。您应对输出结果进行人工核查。因使用本工具导致的任何直接或间接损失，开发者不承担法律责任。</p>
+              </section>
+
+              <section>
+                  <h4 className="font-bold text-slate-800 mb-1">4. 知识产权</h4>
+                  <p>本工具的源代码受开源协议保护。您利用本工具创作的文档内容的知识产权归您所有。</p>
+              </section>
             </div>
           </div>
         );
@@ -90,16 +125,16 @@ const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
             <h3 className="text-lg font-bold text-slate-900">常见问题 (FAQ)</h3>
             <div className="space-y-3">
               <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                <p className="font-bold text-slate-800 text-xs mb-1">Q: API Key 报错怎么办？</p>
-                <p className="text-slate-500 text-xs">A: 请检查右上角设置，确认 Key 是否有额度，或尝试切换不同的模型（如 Qwen 或 Mimo）。</p>
+                <p className="font-bold text-slate-800 text-xs mb-1">Q: 图片可以导出到 Word 吗？</p>
+                <p className="text-slate-500 text-xs">A: 可以！V1.5 版本已支持图片导出。只要 Markdown 中的图片链接是有效的（支持 Base64 或允许跨域的 URL），导出时会自动嵌入 Word 文档。</p>
               </div>
               <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                <p className="font-bold text-slate-800 text-xs mb-1">Q: 导出的 Word 公式乱码？</p>
-                <p className="text-slate-500 text-xs">A: 请使用“导出预优化”功能清洗 LaTeX 语法。Word 对部分复杂 LaTeX 环境支持有限，建议简化公式。</p>
+                <p className="font-bold text-slate-800 text-xs mb-1">Q: 公众号格式复制后图片不显示？</p>
+                <p className="text-slate-500 text-xs">A: 微信公众号对外部图片有防盗链限制。建议先将图片上传至微信后台，或使用 Base64 格式的图片。</p>
               </div>
               <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                <p className="font-bold text-slate-800 text-xs mb-1">Q: 可以在手机上使用吗？</p>
-                <p className="text-slate-500 text-xs">A: 目前的界面针对桌面端优化，手机端可能存在布局错位，建议使用 PC 浏览器访问。</p>
+                <p className="font-bold text-slate-800 text-xs mb-1">Q: 公式需要手动转图片吗？</p>
+                <p className="text-slate-500 text-xs">A: 不需要。本工具支持导出为 Word 原生公式 (OMML)，您可以直接在 Word 中双击编辑公式，无需转换为图片。</p>
               </div>
             </div>
           </div>

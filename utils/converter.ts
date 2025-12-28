@@ -3,7 +3,7 @@ import {
   Document, Packer, Paragraph, TextRun, HeadingLevel, 
   AlignmentType, Table, TableRow, TableCell, WidthType, 
   BorderStyle, ShadingType, VerticalAlign,
-  Math, MathRun
+  Math as DocxMath, MathRun, ImageRun
 } from 'docx';
 import { WordTemplate, DocumentStyle } from '../types';
 
@@ -57,9 +57,12 @@ export function htmlToMarkdown(html: string): string {
 /**
  * 将文本解析为带有样式的 TextRun 数组
  */
-function parseInlineStyles(text: string, font: string, fontSize: number, color: string): (TextRun | Math)[] {
-  const runs: (TextRun | Math)[] = [];
+function parseInlineStyles(text: string, font: string, fontSize: number, color: string): (TextRun | DocxMath)[] {
+  const runs: (TextRun | DocxMath)[] = [];
   // 匹配：加粗 (**), 斜体 (*), 行内代码 (`), 公式 ($)
+  // 注意：需要避免匹配到图片标记 ![...](...)
+  // 简单的处理：先不处理图片内的文本。
+  
   const regex = /(\*\*\*?|__?|`|\$)(.*?)\1/g;
   let lastIndex = 0;
   let match;
@@ -88,8 +91,8 @@ function parseInlineStyles(text: string, font: string, fontSize: number, color: 
         color: "E11D48" 
       }));
     } else if (marker === '$') {
-      // 使用 Math 和 MathRun 包裹行内公式
-      runs.push(new Math({
+      // 使用 DocxMath 和 MathRun 包裹行内公式 (Docx 原生支持)
+      runs.push(new DocxMath({
         children: [new MathRun(content)]
       }));
     }
@@ -135,6 +138,38 @@ const DEFAULT_STYLES: Record<string, DocumentStyle> = {
   }
 };
 
+/**
+ * Helper to fetch image data as ArrayBuffer and detect its natural dimensions
+ */
+async function fetchImageBuffer(url: string): Promise<{ data: ArrayBuffer, width: number, height: number } | null> {
+    try {
+        const response = await fetch(url);
+        if (!response.ok) return null;
+        const blob = await response.blob();
+        const buffer = await blob.arrayBuffer();
+        
+        // Detect dimensions using HTML Image object
+        const dimensions = await new Promise<{ width: number, height: number }>((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+                const dims = { width: img.naturalWidth, height: img.naturalHeight };
+                URL.revokeObjectURL(img.src);
+                resolve(dims);
+            };
+            img.onerror = () => {
+                 URL.revokeObjectURL(img.src);
+                 resolve({ width: 600, height: 400 }); // Fallback defaults
+            };
+            img.src = URL.createObjectURL(blob);
+        });
+        
+        return { data: buffer, width: dimensions.width, height: dimensions.height }; 
+    } catch (e) {
+        console.warn("Failed to fetch image for docx:", url);
+        return null;
+    }
+}
+
 export async function downloadDocx(markdown: string, template: WordTemplate, customStyle?: DocumentStyle) {
   const lines = markdown.split('\n');
   const sections: any[] = [];
@@ -169,7 +204,65 @@ export async function downloadDocx(markdown: string, template: WordTemplate, cus
       }));
       i++;
     } 
-    // 2. 处理代码块
+    // 2. 处理图片 ![alt](url)
+    else if (line.match(/^!\[(.*?)\]\((.*?)\)/)) {
+        const match = line.match(/^!\[(.*?)\]\((.*?)\)/);
+        if (match) {
+            const alt = match[1];
+            const url = match[2];
+            
+            // Try to fetch image
+            const imgData = await fetchImageBuffer(url);
+            
+            if (imgData) {
+                // Smart Scaling: Preserve aspect ratio, but fit within page margins
+                // A4 content width is roughly 600px (depends on margins)
+                const MAX_WIDTH = 600; 
+                let finalWidth = imgData.width;
+                let finalHeight = imgData.height;
+
+                if (finalWidth > MAX_WIDTH) {
+                    const ratio = MAX_WIDTH / finalWidth;
+                    finalWidth = MAX_WIDTH;
+                    finalHeight = Math.round(finalHeight * ratio);
+                }
+
+                sections.push(new Paragraph({
+                    children: [
+                        new ImageRun({
+                            data: imgData.data,
+                            transformation: {
+                                width: finalWidth,
+                                height: finalHeight,
+                            },
+                            altText: {
+                                title: alt,
+                                description: alt,
+                                name: alt,
+                            }
+                        }),
+                        new TextRun({
+                             text: `\n图: ${alt}`,
+                             font: font,
+                             size: fontSize - 2,
+                             color: "666666",
+                             italics: true
+                        })
+                    ],
+                    alignment: AlignmentType.CENTER,
+                    spacing: { before: 200, after: 200 }
+                }));
+            } else {
+                // Fallback text if image fails
+                sections.push(new Paragraph({
+                    children: [new TextRun({ text: `[Image: ${alt} - Download Failed]`, color: "FF0000" })],
+                    alignment: AlignmentType.CENTER
+                }));
+            }
+        }
+        i++;
+    }
+    // 3. 处理代码块
     else if (line.startsWith('```')) {
       const codeLines = [];
       i++;
@@ -203,7 +296,7 @@ export async function downloadDocx(markdown: string, template: WordTemplate, cus
         ],
       }));
     }
-    // 3. 处理表格
+    // 4. 处理表格
     else if (line.startsWith('|')) {
       const tableRows = [];
       while (i < lines.length && lines[i].trim().startsWith('|')) {
@@ -231,9 +324,10 @@ export async function downloadDocx(markdown: string, template: WordTemplate, cus
       sections.push(new Table({
         rows: tableRows,
         width: { size: 100, type: WidthType.PERCENTAGE },
+        alignment: AlignmentType.CENTER
       }));
     }
-    // 4. 处理块级公式
+    // 5. 处理块级公式
     else if (line.startsWith('$$')) {
       let formula = line.replace(/\$\$/g, '');
       if (formula === '') {
@@ -243,10 +337,10 @@ export async function downloadDocx(markdown: string, template: WordTemplate, cus
           i++;
         }
       }
-      // 使用 Math 和 MathRun，让 Word 识别这是公式区域
+      // 使用 DocxMath 和 MathRun，让 Word 识别这是公式区域
       sections.push(new Paragraph({
         children: [
-            new Math({
+            new DocxMath({
                 children: [new MathRun(formula.trim())]
             })
         ],
@@ -255,7 +349,7 @@ export async function downloadDocx(markdown: string, template: WordTemplate, cus
       }));
       i++;
     }
-    // 5. 处理引用
+    // 6. 处理引用
     else if (line.startsWith('>')) {
       sections.push(new Paragraph({
         children: parseInlineStyles(line.replace(/^>\s*/, ''), font, fontSize, "555555") as any,
@@ -265,7 +359,7 @@ export async function downloadDocx(markdown: string, template: WordTemplate, cus
       }));
       i++;
     }
-    // 6. 普通段落
+    // 7. 普通段落
     else {
       if (line !== '') {
         sections.push(new Paragraph({
