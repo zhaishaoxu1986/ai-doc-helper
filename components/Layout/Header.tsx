@@ -24,8 +24,8 @@ const Header: React.FC<HeaderProps> = ({ currentView, setView }) => {
 
   return (
     <>
-      <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-50 shadow-sm">
-        <div className="flex items-center space-x-3 group cursor-pointer" onClick={() => window.location.reload()}>
+      <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-50 shadow-sm relative">
+        <div className="flex items-center space-x-3 group cursor-pointer z-10" onClick={() => window.location.reload()}>
           {/* Logo 区域 */}
           <div className="w-8 h-8 relative flex items-center justify-center">
             {!logoError ? (
@@ -46,18 +46,19 @@ const Header: React.FC<HeaderProps> = ({ currentView, setView }) => {
           <h1 className="text-lg font-bold tracking-tight text-slate-800 hidden md:block hover:text-[var(--primary-color)] transition-colors font-mono">AI Doc Helper</h1>
         </div>
 
-        <nav className="flex space-x-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200 overflow-x-auto custom-scrollbar max-w-[50vw] md:max-w-none">
+        {/* 居中导航栏 - 使用绝对定位确保完美居中 */}
+        <nav className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 flex space-x-1 bg-slate-50 p-1 rounded-xl border border-slate-200 overflow-x-auto custom-scrollbar max-w-[60vw]">
           {tabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setView(tab.id)}
-              className={`flex items-center px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${
+              className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
                 currentView === tab.id 
                   ? 'bg-white shadow-sm text-[var(--primary-color)] ring-1 ring-slate-100' 
                   : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/50'
               }`}
             >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={tab.icon} />
               </svg>
               <span>{tab.name}</span>
@@ -65,7 +66,7 @@ const Header: React.FC<HeaderProps> = ({ currentView, setView }) => {
           ))}
         </nav>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-3 z-10">
           <div className="hidden lg:flex items-center px-3 py-1 bg-[var(--primary-50)] border border-[var(--primary-50)] rounded-full mr-1">
              <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary-color)] mr-2 animate-pulse"></span>
              <span className="text-[10px] font-bold text-[var(--primary-color)] whitespace-nowrap">当前引擎: {activeConfig.modelName}</span>
