@@ -5,7 +5,6 @@ import MarkdownEditor from './components/Editor/MarkdownEditor';
 import WordPreview from './components/Preview/WordPreview';
 import FormulaOCR from './components/OCR/FormulaOCR';
 import MultiDocProcessor from './components/MultiDoc/MultiDocProcessor';
-import PDFConverter from './components/PDF/PDFConverter';
 import { AppView, DocumentState } from './types';
 import { getTheme } from './utils/settings';
 
@@ -140,12 +139,6 @@ $$
         {view === AppView.MULTI_DOC && (
           <div className="h-full animate-in slide-in-from-bottom-4 duration-300 overflow-y-auto">
             <MultiDocProcessor />
-          </div>
-        )}
-
-        {view === AppView.PDF_IMPORT && (
-          <div className="h-full animate-in slide-in-from-bottom-4 duration-300 overflow-y-auto">
-            <PDFConverter onResult={insertAtCursor} />
           </div>
         )}
       </main>

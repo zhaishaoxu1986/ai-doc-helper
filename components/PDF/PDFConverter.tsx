@@ -299,7 +299,7 @@ Your response:`;
                   width: width,
                   height: height
                 }
-              })
+              } as any)
             ],
             spacing: { before: 200, after: 200 }
           }));
@@ -645,7 +645,7 @@ Page ${pageNum} of ${images.length}:`;
                         {(() => {
                           let imageIndex = 0;
                           const lines = result.markdown.split('\n');
-                          const elements: JSX.Element[] = [];
+                          const elements: React.ReactElement[] = [];
                           let textBuffer: string[] = [];
                           
                           const flushTextBuffer = (key: number) => {

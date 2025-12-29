@@ -1,33 +1,26 @@
 
 export const AVAILABLE_MODELS = [
   { 
-    id: 'qwen3-omni-flash', 
-    name: 'Qwen 3 Omni Flash (推荐)', 
+    id: 'Qwen/Qwen3-VL-30B-A3B-Instruct', 
+    name: 'Qwen3 VL 30B (Instruct)', 
     type: 'multimodal',
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    defaultKey: 'sk-8e91ea7d3fba4f22b9a6a3e796ec8a2b'
+    baseUrl: 'https://api.siliconflow.cn/v1/chat/completions',
+    defaultKey: 'sk-xydsgjjthlqvghekjgvzdvuekglilifehtodefbxaszptliw'
   },
   { 
-    id: 'qwen3-omni-flash-realtime', 
-    name: 'Qwen 3 Omni Flash (Realtime)', 
+    id: 'Qwen/Qwen3-VL-8B-Thinking', 
+    name: 'Qwen3 VL 8B (Thinking)', 
     type: 'multimodal',
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    defaultKey: 'sk-8e91ea7d3fba4f22b9a6a3e796ec8a2b'
+    baseUrl: 'https://api.siliconflow.cn/v1/chat/completions',
+    defaultKey: 'sk-xydsgjjthlqvghekjgvzdvuekglilifehtodefbxaszptliw'
   },
   { 
-    id: 'qwen-flash', 
-    name: 'Qwen Flash', 
-    type: 'fast',
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    defaultKey: 'sk-8e91ea7d3fba4f22b9a6a3e796ec8a2b'
-  },
-  { 
-    id: 'mimo-v2-flash', 
-    name: 'Xiaomi Mimo V2 Flash', 
-    type: 'fast',
-    baseUrl: 'https://api.xiaomimimo.com/v1',
-    defaultKey: 'sk-c6ff967bzbr38ailaga6wpsr6k4ry8ig5t0ae4lj4xxba9ep'
-  },
+    id: 'zai-org/GLM-4.6V', 
+    name: 'GLM 4.6V', 
+    type: 'multimodal',
+    baseUrl: 'https://api.siliconflow.cn/v1/chat/completions',
+    defaultKey: 'sk-xydsgjjthlqvghekjgvzdvuekglilifehtodefbxaszptliw'
+  }
 ];
 
 export const THEME_PRESETS = [
@@ -46,21 +39,25 @@ export const getEffectiveModel = (taskType: 'ocr' | 'text' = 'text'): string => 
   }
   const userModel = localStorage.getItem('user_model');
   if (userModel) return userModel;
-  return 'qwen3-omni-flash';
+  return AVAILABLE_MODELS[0].id;
 };
 
 export const getModelConfig = (taskType: 'ocr' | 'text' = 'text') => {
   const modelId = getEffectiveModel(taskType);
-  const preset = AVAILABLE_MODELS.find(m => m.id === modelId);
+  const preset = AVAILABLE_MODELS.find(m => m.id === modelId) || AVAILABLE_MODELS[0];
   const userKey = localStorage.getItem('user_api_key');
   const userUrl = localStorage.getItem('user_base_url');
+  
   let apiKey = userKey || '';
   let baseUrl = userUrl || '';
+  
   if (preset) {
     if (!apiKey && preset.defaultKey) apiKey = preset.defaultKey;
     if (!baseUrl && preset.baseUrl) baseUrl = preset.baseUrl;
   }
+  
   if (!apiKey) apiKey = process.env.API_KEY || '';
+  
   return {
     model: modelId,
     apiKey,
