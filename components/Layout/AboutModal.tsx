@@ -33,7 +33,7 @@ const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
                 )}
               </div>
               <h3 className="text-xl font-bold text-slate-900">AI Doc Helper</h3>
-              <p className="text-slate-500 text-sm">V1.5.0 Professional</p>
+              <p className="text-slate-500 text-sm">V2.0 Professional</p>
             </div>
             <p className="text-slate-600 leading-relaxed text-sm">
               AI Doc Helper 是一个专注于学术与专业文档处理的智能助手。我们致力于通过先进的人工智能技术，解决 Markdown 到 Word 转换过程中的排版痛点，提供公式识别、格式清洗、学术润色以及微信公众号一键排版服务。
@@ -41,7 +41,7 @@ const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mt-4">
               <h4 className="font-bold text-slate-800 text-sm mb-2">开发者寄语</h4>
               <p className="text-slate-500 text-xs italic">
-                "省下来的时间可以喝杯咖啡"
+                "省下来的时间可以喝杯咖啡☕️☕️"
               </p>
             </div>
             
@@ -66,7 +66,7 @@ const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
         return (
           <div className="space-y-4 animate-in fade-in duration-300 h-[300px] overflow-y-auto custom-scrollbar pr-2">
             <h3 className="text-lg font-bold text-slate-900">隐私政策 (Privacy Policy)</h3>
-            <p className="text-xs text-slate-500 mb-4">生效日期：2024年1月1日</p>
+            <p className="text-xs text-slate-500 mb-4">生效日期：2025年12月1日</p>
             
             <div className="text-sm text-slate-600 space-y-4">
               <section>
@@ -125,6 +125,24 @@ const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
             <h3 className="text-lg font-bold text-slate-900">常见问题 (FAQ)</h3>
             <div className="space-y-3">
               <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                <p className="font-bold text-slate-800 text-xs mb-1">Q: 如何获取API？</p>
+                <p className="text-slate-500 text-xs leading-relaxed">
+                  A: 你可以前往国内有名的API网站获取（有免费额度可以试用）。例如：
+                  <br />
+                  <a href="https://www.siliconflow.cn/" target="_blank" rel="noopener noreferrer" className="text-[var(--primary-color)] hover:underline font-medium">
+                    • 硅基流动
+                  </a>
+                  <br />
+                  <a href="https://bailian.console.aliyun.com/" target="_blank" rel="noopener noreferrer" className="text-[var(--primary-color)] hover:underline font-medium">
+                    • 阿里云百炼
+                  </a>
+                  <br />
+                  <a href="https://www.aliyun.com/product/dashscope" target="_blank" rel="noopener noreferrer" className="text-[var(--primary-color)] hover:underline font-medium">
+                    • 通义千问
+                  </a>
+                </p>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
                 <p className="font-bold text-slate-800 text-xs mb-1">Q: 图片可以导出到 Word 吗？</p>
                 <p className="text-slate-500 text-xs">A: 可以！V1.5 版本已支持图片导出。只要 Markdown 中的图片链接是有效的（支持 Base64 或允许跨域的 URL），导出时会自动嵌入 Word 文档。</p>
               </div>
@@ -175,7 +193,7 @@ const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
             ))}
           </nav>
           <div className="text-[10px] text-slate-300 px-2 mt-auto">
-            © 2024 AI Doc Helper
+            © 2025 AI Doc Helper
           </div>
         </div>
 

@@ -114,7 +114,7 @@ const UserCenter: React.FC = () => {
           <div className="absolute right-0 mt-3 w-80 bg-white rounded-[24px] shadow-2xl border border-slate-200 z-50 p-6 animate-in fade-in zoom-in duration-200 origin-top-right">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-bold text-slate-900">用户中心</h3>
-              <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-bold">V1.4.3</span>
+              <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-bold">V2.0</span>
             </div>
             
             <div className="space-y-4">

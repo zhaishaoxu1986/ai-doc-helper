@@ -17,11 +17,16 @@ interface FormulaOCRProps {
   onResult: (text: string) => void;
 }
 
-interface FormulaResult {
+interface FormulaData {
   inline: string;
   block: string;
   raw: string;
   html: string;
+}
+
+interface FormulaResult {
+  data: FormulaData[];
+  count: number;
 }
 
 interface TableResult {
@@ -73,6 +78,13 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
   const [activeTableTab, setActiveTableTab] = useState<'preview' | 'markdown' | 'html'>('preview');
   const [activeHandwritingTab, setActiveHandwritingTab] = useState<'preview' | 'markdown' | 'html'>('preview');
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied'>('idle');
+  
+  // Settings State
+  const [showPromptSettings, setShowPromptSettings] = useState(false);
+  const [formulaPrompt, setFormulaPrompt] = useState(() => localStorage.getItem('prompt_formula') || 'Identify ALL mathematical formulas in the image. Output strictly valid JSON: { "formulas": [{"inline": "$...$", "block": "$$...$$", "raw": "latex", "html": "mathml"}] }. If only one formula, return array with single element.');
+  const [tablePrompt, setTablePrompt] = useState(() => localStorage.getItem('prompt_table') || 'Analyze image containing table. Output strictly content in Markdown format. Use standard Markdown tables.');
+  const [handwritingPrompt, setHandwritingPrompt] = useState(() => localStorage.getItem('prompt_handwriting') || 'Transcribe handwritten text to Markdown. Preserve lists, headings. Do not wrap in JSON.');
+  const [tempPrompt, setTempPrompt] = useState('');
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -295,26 +307,44 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
       
       let sampleDataUrl = '';
       try {
-          // For handwriting mode, try to load from file first
-          if (mode === 'handwriting') {
+          // Try to load from file first for all modes
+          let filePath = '';
+          if (mode === 'formula') {
+              filePath = '/ocr/latex.png';
+          } else if (mode === 'table') {
+              filePath = '/ocr/table.jpg';
+          } else if (mode === 'handwriting') {
+              filePath = '/ocr/handwrite.jpg';
+          }
+          
+          if (filePath) {
               try {
-                  const response = await fetch('/ocr/handwrite.jpg');
+                  const response = await fetch(filePath);
                   if (response.ok) {
                       const blob = await response.blob();
                       sampleDataUrl = await processImage(blob);
                   } else {
                       // Fallback to canvas generation if file not found
-                      sampleDataUrl = createHandwritingSampleImage();
+                      console.warn(`Failed to load ${filePath}, using canvas generation`);
+                      if (mode === 'formula') {
+                          sampleDataUrl = createFormulaSampleImage();
+                      } else if (mode === 'table') {
+                          sampleDataUrl = createTableSampleImage();
+                      } else if (mode === 'handwriting') {
+                          sampleDataUrl = createHandwritingSampleImage();
+                      }
                   }
               } catch (err) {
                   // Fallback to canvas generation if fetch fails
-                  console.warn('Failed to load handwriting sample image, using canvas generation');
-                  sampleDataUrl = createHandwritingSampleImage();
+                  console.warn(`Failed to load ${filePath}, using canvas generation`);
+                  if (mode === 'formula') {
+                      sampleDataUrl = createFormulaSampleImage();
+                  } else if (mode === 'table') {
+                      sampleDataUrl = createTableSampleImage();
+                  } else if (mode === 'handwriting') {
+                      sampleDataUrl = createHandwritingSampleImage();
+                  }
               }
-          } else if (mode === 'formula') {
-              sampleDataUrl = createFormulaSampleImage();
-          } else if (mode === 'table') {
-              sampleDataUrl = createTableSampleImage();
           }
           
           if (sampleDataUrl) {
@@ -323,7 +353,7 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
           }
       } catch (e) {
           console.error("Sample generation failed", e);
-          alert("无法生成示例图片");
+          alert("无法加载示例图片");
       }
   };
 
@@ -421,6 +451,49 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
       const end = clean.lastIndexOf('}');
       if (start !== -1 && end !== -1) clean = clean.substring(start, end + 1);
       try { return JSON.parse(clean); } catch (e) { throw new Error("Invalid JSON structure in response."); }
+  };
+
+  const parseFormulaJsonSafe = (text: string): FormulaResult => {
+      let clean = text.trim();
+      const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)(?:```|$)/;
+      const match = clean.match(codeBlockRegex);
+      if (match && match[1]) clean = match[1].trim();
+      const start = clean.indexOf('{');
+      const end = clean.lastIndexOf('}');
+      if (start !== -1 && end !== -1) clean = clean.substring(start, end + 1);
+      
+      try {
+          const parsed = JSON.parse(clean);
+          
+          // 处理新格式：{ formulas: [...] }
+          if (parsed.formulas && Array.isArray(parsed.formulas)) {
+              return {
+                  data: parsed.formulas,
+                  count: parsed.formulas.length
+              };
+          }
+          
+          // 处理旧格式（单个公式）向后兼容
+          if (parsed.inline || parsed.block || parsed.raw || parsed.html) {
+              return {
+                  data: [parsed],
+                  count: 1
+              };
+          }
+          
+          // 处理数组格式直接返回的情况
+          if (Array.isArray(parsed)) {
+              return {
+                  data: parsed,
+                  count: parsed.length
+              };
+          }
+          
+          throw new Error("Invalid JSON structure in response.");
+      } catch (e) {
+          console.error('JSON Parse Error:', e);
+          throw new Error("无法解析识别结果，请重试或检查图片。");
+      }
   };
 
   // --- PDF Helpers ---
@@ -661,10 +734,10 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
             baseUrl: config.baseUrl,
             image: base64Data,
             mimeType: mimeType,
-            prompt: 'Identify the mathematical formula. Output strictly valid JSON: { "inline": "$...$", "block": "$$...$$", "raw": "latex", "html": "mathml" }',
-            jsonSchema: { type: Type.OBJECT, properties: { inline: {type:Type.STRING}, block: {type:Type.STRING}, raw: {type:Type.STRING}, html: {type:Type.STRING} } }
+            prompt: formulaPrompt,
+            jsonSchema: { type: Type.OBJECT, properties: { formulas: {type:Type.ARRAY, items: {type:Type.OBJECT, properties: { inline: {type:Type.STRING}, block: {type:Type.STRING}, raw: {type:Type.STRING}, html: {type:Type.STRING} }}}} }
           });
-          setFormulaResult(parseJsonSafe(responseText));
+          setFormulaResult(parseFormulaJsonSafe(responseText));
           setActiveFormulaTab('block');
       } else if (mode === 'table') {
           const responseText = await generateContent({
@@ -673,7 +746,7 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
               baseUrl: config.baseUrl,
               image: base64Data,
               mimeType: mimeType,
-              prompt: `Analyze image containing table. Output strictly content in Markdown format. Use standard Markdown tables.`
+              prompt: tablePrompt
           });
           setTableResult({ markdown: responseText, html: responseText });
           setActiveTableTab('preview');
@@ -684,7 +757,7 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
               baseUrl: config.baseUrl,
               image: base64Data,
               mimeType: mimeType,
-              prompt: 'Transcribe handwritten text to Markdown. Preserve lists, headings. Do not wrap in JSON.'
+              prompt: handwritingPrompt
           });
           setHandwritingResult({ markdown: responseText, html: responseText });
           setActiveHandwritingTab('preview');
@@ -704,8 +777,36 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
     });
   };
 
+  const openPromptSettings = () => {
+      setTempPrompt(mode === 'formula' ? formulaPrompt : mode === 'table' ? tablePrompt : handwritingPrompt);
+      setShowPromptSettings(true);
+  };
+
+  const savePromptSettings = () => {
+      if (mode === 'formula') {
+          setFormulaPrompt(tempPrompt);
+          localStorage.setItem('prompt_formula', tempPrompt);
+      } else if (mode === 'table') {
+          setTablePrompt(tempPrompt);
+          localStorage.setItem('prompt_table', tempPrompt);
+      } else if (mode === 'handwriting') {
+          setHandwritingPrompt(tempPrompt);
+          localStorage.setItem('prompt_handwriting', tempPrompt);
+      }
+      setShowPromptSettings(false);
+  };
+
   const insertContent = () => {
-      if (mode === 'formula' && formulaResult) onResult(formulaResult[activeFormulaTab]);
+      if (mode === 'formula' && formulaResult) {
+          // 如果有多个公式，插入所有公式的指定格式；如果只有一个，只插入第一个
+          let content = '';
+          if (formulaResult.count > 1) {
+              content = formulaResult.data.map(f => f[activeFormulaTab]).join('\n\n');
+          } else {
+              content = formulaResult.data[0][activeFormulaTab];
+          }
+          onResult(content);
+      }
       else if (mode === 'table' && tableResult) onResult(tableResult.markdown);
       else if (mode === 'handwriting' && handwritingResult) onResult(handwritingResult.markdown);
       else if (mode === 'pdf' && pdfResult) {
@@ -817,25 +918,34 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
               </div>
           )}
 
-          {/* Action Button */}
-          <button 
-            onClick={analyzeImage}
-            disabled={(!image && !pdfFile) || isAnalyzing}
-            className={`w-full py-4 rounded-2xl font-bold text-lg transition-all flex items-center justify-center text-white shadow-xl ${
-                (!image && !pdfFile) || isAnalyzing ? 'bg-slate-300 cursor-not-allowed' : 
-                mode === 'pdf' ? 'bg-rose-600 hover:bg-rose-700' : 
-                mode === 'table' ? 'bg-green-600 hover:bg-green-700' :
-                mode === 'handwriting' ? 'bg-amber-500 hover:bg-amber-600' :
-                'bg-[var(--primary-color)] hover:bg-[var(--primary-hover)]'
-            }`}
-          >
-            {isAnalyzing ? (
-                <>
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                    {mode === 'pdf' ? pdfProgress || 'AI 处理中...' : 'AI 识别中...'}
-                </>
-            ) : (mode === 'pdf' ? '开始 PDF 全文转换' : '开始识别')}
-          </button>
+          {/* Action Buttons */}
+          <div className="flex gap-3">
+              <button
+                onClick={openPromptSettings}
+                className="flex-1 py-4 rounded-2xl font-bold text-lg transition-all flex items-center justify-center bg-slate-100 text-slate-600 hover:bg-slate-200 shadow-sm"
+              >
+                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                  配置 Prompt
+              </button>
+              <button
+                onClick={analyzeImage}
+                disabled={(!image && !pdfFile) || isAnalyzing}
+                className={`flex-1 py-4 rounded-2xl font-bold text-lg transition-all flex items-center justify-center text-white shadow-xl ${
+                    (!image && !pdfFile) || isAnalyzing ? 'bg-slate-300 cursor-not-allowed' :
+                    mode === 'pdf' ? 'bg-rose-600 hover:bg-rose-700' :
+                    mode === 'table' ? 'bg-green-600 hover:bg-green-700' :
+                    mode === 'handwriting' ? 'bg-amber-500 hover:bg-amber-600' :
+                    'bg-[var(--primary-color)] hover:bg-[var(--primary-hover)]'
+                }`}
+              >
+                {isAnalyzing ? (
+                    <>
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        {mode === 'pdf' ? pdfProgress || 'AI 处理中...' : 'AI 识别中...'}
+                    </>
+                ) : (mode === 'pdf' ? '开始 PDF 全文转换' : '开始识别')}
+              </button>
+          </div>
         </div>
 
         {/* RIGHT COLUMN: Results */}
@@ -928,8 +1038,55 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
                         <div className="flex-1 overflow-auto bg-slate-50 rounded-xl border border-slate-200 p-4 custom-scrollbar">
                             {mode === 'formula' && formulaResult && (
                                 <div className="flex flex-col gap-4">
-                                    <div className="bg-slate-800 text-slate-200 p-3 rounded-lg font-mono text-xs break-all">{formulaResult[activeFormulaTab]}</div>
-                                    {activeFormulaTab !== 'html' && <div className="text-center p-4"><ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{formulaResult[activeFormulaTab]}</ReactMarkdown></div>}
+                                    {/* 显示公式数量 */}
+                                    <div className="text-center text-xs text-slate-500 bg-slate-100 py-2 rounded-lg">
+                                        共识别到 {formulaResult.count} 个公式
+                                    </div>
+                                    
+                                    {/* 遍历显示所有公式 */}
+                                    {formulaResult.data.map((formulaData, index) => (
+                                        <div key={index} className="flex flex-col gap-3 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs font-bold text-[var(--primary-color)]">公式 #{index + 1}</span>
+                                                <button onClick={() => handleCopy(formulaData[activeFormulaTab])} className="text-xs text-slate-400 hover:text-[var(--primary-color)] transition-colors">
+                                                    {copyStatus === 'copied' ? '✓ 已复制' : '复制'}
+                                                </button>
+                                            </div>
+                                            
+                                            {/* 显示原始代码 */}
+                                            <div className="bg-slate-800 text-slate-200 p-3 rounded-lg font-mono text-xs break-all">
+                                                {formulaData[activeFormulaTab]}
+                                            </div>
+                                            
+                                            {/* 显示渲染结果 */}
+                                            {activeFormulaTab !== 'html' && activeFormulaTab !== 'raw' && (
+                                                <div className={` overflow-x-auto p-4 bg-slate-50 rounded-lg ${activeFormulaTab === 'block' ? 'py-6' : ''}`}>
+                                                    <ReactMarkdown
+                                                        remarkPlugins={[remarkMath]}
+                                                        rehypePlugins={[rehypeKatex]}
+                                                        className="w-full"
+                                                    >
+                                                        {formulaData[activeFormulaTab]}
+                                                    </ReactMarkdown>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                    
+                                    {/* 底部批量操作 */}
+                                    {formulaResult.count > 1 && (
+                                        <div className="flex justify-center gap-2 mt-2">
+                                            <button
+                                                onClick={() => {
+                                                    const allFormulas = formulaResult.data.map((f, i) => `公式 ${i + 1}:\n${f[activeFormulaTab]}`).join('\n\n');
+                                                    handleCopy(allFormulas);
+                                                }}
+                                                className="px-4 py-2 bg-[var(--primary-color)] text-white text-xs font-bold rounded-lg hover:bg-[var(--primary-hover)] transition-colors"
+                                            >
+                                                复制全部公式
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                             {mode === 'table' && tableResult && (
@@ -973,11 +1130,52 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
                     插入编辑器
                 </button>
              </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+         )}
+       </div>
+     </div>
+
+     {/* Prompt Settings Modal */}
+     {showPromptSettings && (
+         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-sm">
+             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-200">
+                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                     <h3 className="font-bold text-slate-800 text-lg flex items-center">
+                         <svg className="w-5 h-5 mr-2 text-[var(--primary-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                         配置 {mode === 'formula' ? '公式识别' : mode === 'table' ? '表格识别' : '手写体识别'} Prompt
+                     </h3>
+                     <button onClick={() => setShowPromptSettings(false)} className="text-slate-400 hover:text-slate-600">
+                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                     </button>
+                 </div>
+                 <div className="p-6">
+                     <p className="text-xs text-slate-500 mb-4">自定义 AI 识别指令，调整识别效果。支持标准的提示词格式。</p>
+                     <textarea
+                         className="w-full h-64 p-4 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-[var(--primary-color)] outline-none resize-none font-mono bg-slate-50 text-slate-700 leading-relaxed shadow-inner"
+                         value={tempPrompt}
+                         onChange={(e) => setTempPrompt(e.target.value)}
+                         placeholder="输入自定义 Prompt..."
+                     ></textarea>
+                 
+                     <div className="mt-6 flex justify-end space-x-3">
+                         <button
+                             onClick={() => setShowPromptSettings(false)}
+                             className="px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                         >
+                             取消
+                         </button>
+                         <button
+                             onClick={savePromptSettings}
+                             className="px-6 py-2.5 text-sm font-bold text-white bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] rounded-xl shadow-lg"
+                         >
+                             保存配置
+                         </button>
+                     </div>
+                 </div>
+             </div>
+         </div>
+     )}
+   </div>
+ );
 };
 
 export default FormulaOCR;

@@ -8,15 +8,22 @@ export const AVAILABLE_MODELS = [
     defaultKey: 'sk-xydsgjjthlqvghekjgvzdvuekglilifehtodefbxaszptliw'
   },
   { 
-    id: 'Qwen/Qwen3-VL-8B-Thinking', 
-    name: 'Qwen3 VL 8B (Thinking)', 
+    id: 'Qwen/Qwen3-VL-235B-A22B-Instruct', 
+    name: 'Qwen3 VL 235B-A22B (Instruct)', 
     type: 'multimodal',
     baseUrl: 'https://api.siliconflow.cn/v1/chat/completions',
     defaultKey: 'sk-xydsgjjthlqvghekjgvzdvuekglilifehtodefbxaszptliw'
   },
   { 
-    id: 'zai-org/GLM-4.6V', 
-    name: 'GLM 4.6V', 
+    id: 'zai-org/GLM-4.7V', 
+    name: 'GLM 4.7V', 
+    type: 'multimodal',
+    baseUrl: 'https://api.siliconflow.cn/v1/chat/completions',
+    defaultKey: 'sk-xydsgjjthlqvghekjgvzdvuekglilifehtodefbxaszptliw'
+  },
+  { 
+    id: 'deepseek-ai/deepseek-vl2', 
+    name: 'DeepSeek VL2', 
     type: 'multimodal',
     baseUrl: 'https://api.siliconflow.cn/v1/chat/completions',
     defaultKey: 'sk-xydsgjjthlqvghekjgvzdvuekglilifehtodefbxaszptliw'

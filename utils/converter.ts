@@ -7,127 +7,49 @@ import {
 import { WordTemplate, DocumentStyle } from '../types';
 
 /**
- * 辅助函数：将 HTML 表格元素转换为 Markdown 表格
- */
-function convertTableToMarkdown(tableEl: HTMLElement): string {
-  let md = '';
-  const rows = Array.from(tableEl.querySelectorAll('tr'));
-  if (rows.length === 0) return '';
-
-  // 1. 提取所有单元格文本
-  const tableData: string[][] = rows.map(row => {
-    const cells = Array.from(row.querySelectorAll('th, td'));
-    return cells.map(cell => {
-      // 移除换行符，Markdown 表格单元格内不支持换行，通常用 <br> 或空格代替
-      return (cell.textContent || '').replace(/[\n\r]+/g, ' ').trim();
-    });
-  });
-
-  // 2. 确定最大列数
-  const colCount = tableData.reduce((max, row) => Math.max(max, row.length), 0);
-  if (colCount === 0) return '';
-
-  // 3. 构建 Markdown
-  // Header Row (First row)
-  const headerRow = tableData[0];
-  // 补齐列
-  while (headerRow.length < colCount) headerRow.push('');
-  md += '| ' + headerRow.join(' | ') + ' |\n';
-
-  // Separator Row
-  md += '| ' + Array(colCount).fill('---').join(' | ') + ' |\n';
-
-  // Data Rows
-  for (let i = 1; i < tableData.length; i++) {
-    const row = tableData[i];
-    while (row.length < colCount) row.push('');
-    md += '| ' + row.join(' | ') + ' |\n';
-  }
-
-  return md;
-}
-
-/**
- * 增强版 HTML 转 Markdown 工具
- * 支持图片提取、列表处理、表格转换等
+ * 简单的 HTML 转 Markdown 工具 (浏览器端实现，无需 Pandoc)
  */
 export function htmlToMarkdown(html: string): string {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
   let md = '';
 
-  function processNode(node: Node, indentLevel: number = 0) {
+  // 递归处理节点
+  function processNode(node: Node) {
     if (node.nodeType === Node.TEXT_NODE) {
-      let text = node.textContent || '';
-      // 简单的去重换行，但保留必要的空格
-      if (text.trim() === '' && text.includes('\n')) return;
-      md += text;
+      md += node.textContent;
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       const el = node as HTMLElement;
-      const tagName = el.tagName.toLowerCase();
-
-      // 特殊处理表格
-      if (tagName === 'table') {
-        md += '\n\n' + convertTableToMarkdown(el) + '\n\n';
-        return;
-      }
-
-      switch (tagName) {
+      switch (el.tagName.toLowerCase()) {
         case 'h1': md += '\n# '; break;
         case 'h2': md += '\n## '; break;
         case 'h3': md += '\n### '; break;
-        case 'h4': md += '\n#### '; break;
-        case 'h5': md += '\n##### '; break;
         case 'p': md += '\n\n'; break;
         case 'strong': 
         case 'b': md += '**'; break;
         case 'em': 
         case 'i': md += '*'; break;
-        case 'li': md += `\n${'  '.repeat(indentLevel)}- `; break;
-        case 'ul': md += '\n'; break;
-        case 'ol': md += '\n'; break;
-        case 'br': md += '  \n'; break;
+        case 'li': md += '\n- '; break;
+        case 'br': md += '\n'; break;
         case 'code': md += '`'; break;
         case 'pre': md += '\n```\n'; break;
-        case 'blockquote': md += '\n> '; break;
-        case 'img': 
-          // 确保提取 src，mammoth 通常生成 base64
-          const src = el.getAttribute('src');
-          const alt = el.getAttribute('alt') || 'image';
-          if (src) {
-              md += `\n![${alt}](${src})\n`;
-          }
-          break;
-        case 'a':
-          md += '[';
-          break;
       }
 
-      // Recursively process children
-      const newIndent = (tagName === 'ul' || tagName === 'ol') ? indentLevel + 1 : indentLevel;
-      el.childNodes.forEach(child => processNode(child, newIndent));
+      el.childNodes.forEach(child => processNode(child));
 
-      // Closing tags / cleanup
-      switch (tagName) {
-        case 'h1': case 'h2': case 'h3': case 'h4': case 'h5': md += '\n'; break;
+      switch (el.tagName.toLowerCase()) {
+        case 'h1': case 'h2': case 'h3': md += '\n'; break;
         case 'p': md += '\n'; break;
         case 'strong': case 'b': md += '**'; break;
         case 'em': case 'i': md += '*'; break;
         case 'code': md += '`'; break;
         case 'pre': md += '\n```\n'; break;
-        case 'div': md += '\n'; break;
-        case 'a':
-            const href = el.getAttribute('href');
-            md += `](${href || '#'})`;
-            break;
       }
     }
   }
 
   processNode(doc.body);
-  
-  // Post-processing cleaning
-  // 1. Replace multiple newlines with max 2
+  // 简单的清理
   return md.replace(/\n\n\n+/g, '\n\n').trim();
 }
 
@@ -136,78 +58,49 @@ export function htmlToMarkdown(html: string): string {
  */
 function parseInlineStyles(text: string, font: string, fontSize: number, color: string): (TextRun | DocxMath)[] {
   const runs: (TextRun | DocxMath)[] = [];
-  
-  const displayMathRegex = /\$\$(.+?)\$\$/g;
-  const inlineMathRegex = /\$(.+?)\$/g;
-  const styleRegex = /(\*\*\*?|__?|`)/g;
-  
-  let processedText = text;
-  const mathPlaceholders: { placeholder: string; content: string; isDisplay: boolean }[] = [];
-  let placeholderIndex = 0;
-  
-  processedText = processedText.replace(displayMathRegex, (match, content) => {
-    const placeholder = `__MATH_DISPLAY_${placeholderIndex}__`;
-    mathPlaceholders.push({ placeholder, content: content.trim(), isDisplay: true });
-    placeholderIndex++;
-    return placeholder;
-  });
-  
-  processedText = processedText.replace(inlineMathRegex, (match, content) => {
-    const placeholder = `__MATH_INLINE_${placeholderIndex}__`;
-    mathPlaceholders.push({ placeholder, content: content.trim(), isDisplay: false });
-    placeholderIndex++;
-    return placeholder;
-  });
-  
-  const segments: { text: string; style?: string }[] = [];
+  // 匹配：加粗 (**), 斜体 (*), 行内代码 (`), 公式 ($)
+  // 注意：需要避免匹配到图片标记 ![...](...)
+  // 简单的处理：先不处理图片内的文本。  
+  const regex = /(\*\*\*?|__?|`|\$)(.*?)\1/g;
   let lastIndex = 0;
   let match;
-  
-  const combinedRegex = /(\*\*\*?|__?|`)(.*?)\1/g;
-  while ((match = combinedRegex.exec(processedText)) !== null) {
+
+  while ((match = regex.exec(text)) !== null) {
+    // 添加匹配前的纯文本
     if (match.index > lastIndex) {
-      segments.push({ text: processedText.substring(lastIndex, match.index) });
+      runs.push(new TextRun({ text: text.substring(lastIndex, match.index), font, size: fontSize * 2, color }));
     }
-    segments.push({ text: match[2], style: match[1] });
-    lastIndex = combinedRegex.lastIndex;
-  }
-  
-  if (lastIndex < processedText.length) {
-    segments.push({ text: processedText.substring(lastIndex) });
-  }
-  
-  for (const segment of segments) {
-    const segmentText = segment.text;
-    
-    const mathPlaceholder = mathPlaceholders.find(m => segmentText.includes(m.placeholder));
-    if (mathPlaceholder) {
-      const parts = segmentText.split(mathPlaceholder.placeholder);
-      if (parts[0]) {
-        runs.push(new TextRun({ text: parts[0], font, size: fontSize * 2, color }));
-      }
-      runs.push(new DocxMath({
-        children: [new MathRun(mathPlaceholder.content)]
-      }));
-      if (parts[1]) {
-        runs.push(new TextRun({ text: parts[1], font, size: fontSize * 2, color }));
-      }
-    } else if (segment.style === '***') {
-      runs.push(new TextRun({ text: segmentText, font, size: fontSize * 2, bold: true, italics: true, color }));
-    } else if (segment.style === '**' || segment.style === '__') {
-      runs.push(new TextRun({ text: segmentText, font, size: fontSize * 2, bold: true, color }));
-    } else if (segment.style === '*' || segment.style === '_') {
-      runs.push(new TextRun({ text: segmentText, font, size: fontSize * 2, italics: true, color }));
-    } else if (segment.style === '`') {
+
+    const marker = match[1];
+    const content = match[2];
+
+    if (marker === '***') {
+      runs.push(new TextRun({ text: content, font, size: fontSize * 2, bold: true, italics: true, color }));
+    } else if (marker === '**' || marker === '__') {
+      runs.push(new TextRun({ text: content, font, size: fontSize * 2, bold: true, color }));
+    } else if (marker === '*' || marker === '_') {
+      runs.push(new TextRun({ text: content, font, size: fontSize * 2, italics: true, color }));
+    } else if (marker === '`') {
       runs.push(new TextRun({ 
-        text: segmentText, 
+        text: content, 
         font: "JetBrains Mono", 
         size: (fontSize - 1) * 2, 
         shading: { type: ShadingType.SOLID, color: "F1F5F9" },
         color: "E11D48" 
       }));
-    } else {
-      runs.push(new TextRun({ text: segmentText, font, size: fontSize * 2, color }));
+    } else if (marker === '$') {
+      // 使用 DocxMath 和 MathRun 包裹行内公式 (Docx 原生支持)
+      runs.push(new DocxMath({
+        children: [new MathRun(content)]
+      }));
     }
+
+    lastIndex = regex.lastIndex;
+  }
+
+  // 添加剩余文本
+  if (lastIndex < text.length) {
+    runs.push(new TextRun({ text: text.substring(lastIndex), font, size: fontSize * 2, color }));
   }
 
   return runs;
@@ -243,39 +136,27 @@ const DEFAULT_STYLES: Record<string, DocumentStyle> = {
   }
 };
 
+/**
+ * Helper to fetch image data as ArrayBuffer and detect its natural dimensions
+ */
 async function fetchImageBuffer(url: string): Promise<{ data: ArrayBuffer, width: number, height: number } | null> {
     try {
-        // Handle Base64 directly
-        if (url.startsWith('data:image')) {
-            const res = await fetch(url);
-            const blob = await res.blob();
-            const buffer = await blob.arrayBuffer();
-             const dimensions = await new Promise<{ width: number, height: number }>((resolve) => {
-                const img = new Image();
-                img.onload = () => {
-                    resolve({ width: img.naturalWidth, height: img.naturalHeight });
-                };
-                img.onerror = () => resolve({ width: 600, height: 400 });
-                img.src = url;
-            });
-            return { data: buffer, width: dimensions.width, height: dimensions.height };
-        }
-
         const response = await fetch(url);
         if (!response.ok) return null;
         const blob = await response.blob();
         const buffer = await blob.arrayBuffer();
         
+        // Detect dimensions using HTML Image object
         const dimensions = await new Promise<{ width: number, height: number }>((resolve) => {
             const img = new Image();
             img.onload = () => {
-                const dims = { width: img.naturalWidth, height: img.naturalHeight };
+                const dims = { width: (img as any).naturalWidth, height: (img as any).naturalHeight };
                 URL.revokeObjectURL(img.src);
                 resolve(dims);
             };
             img.onerror = () => {
                  URL.revokeObjectURL(img.src);
-                 resolve({ width: 600, height: 400 });
+                 resolve({ width: 600, height: 400 }); // Fallback defaults
             };
             img.src = URL.createObjectURL(blob);
         });
@@ -289,15 +170,14 @@ async function fetchImageBuffer(url: string): Promise<{ data: ArrayBuffer, width
 
 export async function downloadDocx(markdown: string, template: WordTemplate, customStyle?: DocumentStyle) {
   const lines = markdown.split('\n');
-  const sections: any[] = [];
-  
-  const style = (template === WordTemplate.CUSTOM && customStyle) ? customStyle : (DEFAULT_STYLES[template] || DEFAULT_STYLES[WordTemplate.STANDARD]);
-  
+  const sections: any[] = [];  
+  // 决定使用哪种样式配置
+  const style = (template === WordTemplate.CUSTOM && customStyle) ? customStyle : (DEFAULT_STYLES[template] || DEFAULT_STYLES[WordTemplate.STANDARD]);  
   const font = style.fontFace;
   const fontSize = style.fontSize; 
-  const headingColor = style.headingColor;
-  const textColor = style.textColor;
-  
+  const headingColor = style.headingColor;  
+  // mapping alignment string to enum
+  // Fix TS2322: use 'any' to avoid strict enum type checking issues in build
   let align: any = AlignmentType.LEFT;
   if (style.alignment === 'center') align = AlignmentType.CENTER;
   if (style.alignment === 'justify') align = AlignmentType.JUSTIFIED;
@@ -307,6 +187,7 @@ export async function downloadDocx(markdown: string, template: WordTemplate, cus
   while (i < lines.length) {
     let line = lines[i].trim();
 
+    // 1. 处理标题
     if (line.startsWith('#')) {
       const level = line.match(/^#+/)?.[0].length || 1;
       const content = line.replace(/^#+\s*/, '');
@@ -318,14 +199,19 @@ export async function downloadDocx(markdown: string, template: WordTemplate, cus
       }));
       i++;
     } 
+    // 2. 处理图片 ![alt](url)
     else if (line.match(/^!\[(.*?)\]\((.*?)\)/)) {
         const match = line.match(/^!\[(.*?)\]\((.*?)\)/);
         if (match) {
             const alt = match[1];
             const url = match[2];
+            
+            // Try to fetch image
             const imgData = await fetchImageBuffer(url);
             
             if (imgData) {
+                // Smart Scaling: Preserve aspect ratio, but fit within page margins
+                // A4 content width is roughly 600px (depends on margins)
                 const MAX_WIDTH = 600; 
                 let finalWidth = imgData.width;
                 let finalHeight = imgData.height;
@@ -362,6 +248,7 @@ export async function downloadDocx(markdown: string, template: WordTemplate, cus
                     spacing: { before: 200, after: 200 }
                 }));
             } else {
+                // Fallback text if image fails
                 sections.push(new Paragraph({
                     children: [new TextRun({ text: `[Image: ${alt} - Download Failed]`, color: "FF0000" })],
                     alignment: AlignmentType.CENTER
@@ -370,6 +257,7 @@ export async function downloadDocx(markdown: string, template: WordTemplate, cus
         }
         i++;
     }
+    // 3. 处理代码块
     else if (line.startsWith('```')) {
       const codeLines = [];
       i++;
@@ -377,7 +265,8 @@ export async function downloadDocx(markdown: string, template: WordTemplate, cus
         codeLines.push(lines[i]);
         i++;
       }
-      i++;
+      i++; // 跳过结束符号
+      
       sections.push(new Table({
         width: { size: 100, type: WidthType.PERCENTAGE },
         rows: [
@@ -402,56 +291,80 @@ export async function downloadDocx(markdown: string, template: WordTemplate, cus
         ],
       }));
     }
+    // 4. 处理表格
     else if (line.startsWith('|')) {
-        const tableLines = [];
-        while (i < lines.length && lines[i].trim().startsWith('|')) {
-            tableLines.push(lines[i].trim());
-            i++;
+      const tableRows = [];
+      while (i < lines.length && lines[i].trim().startsWith('|')) {
+        const rawRow = lines[i].trim();
+        if (!rawRow.match(/^\|[:\s-]+\|/)) {
+          const cells = rawRow.split('|').filter(c => c.trim() !== '' || rawRow.indexOf('|' + c + '|') !== -1).map(c => c.trim());
+          if (cells.length > 0) {
+            tableRows.push(new TableRow({
+              children: cells.map(cell => new TableCell({
+                children: [new Paragraph({ children: parseInlineStyles(cell, font, fontSize - 1, style.textColor) as any })],
+                borders: {
+                  top: { style: BorderStyle.SINGLE, size: 1, color: "94A3B8" },
+                  bottom: { style: BorderStyle.SINGLE, size: 1, color: "94A3B8" },
+                  left: { style: BorderStyle.SINGLE, size: 1, color: "94A3B8" },
+                  right: { style: BorderStyle.SINGLE, size: 1, color: "94A3B8" },
+                },
+                verticalAlign: VerticalAlign.CENTER,
+                margins: { top: 100, bottom: 100, left: 100, right: 100 }
+              }))
+            }));
+          }
         }
-        
-        // Process tableLines into docx Table
-        const rows = tableLines.map(row => {
-            // Remove leading/trailing pipes and split
-            // Note: This is a simple split and might break if pipes are inside cells, 
-            // but for standard Markdown tables it works.
-            const cells = row.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
-            return cells;
-        }).filter(row => !row.every(cell => cell.match(/^-+$/))); // Filter separator row
-
-        if (rows.length > 0) {
-             sections.push(new Table({
-                 width: { size: 100, type: WidthType.PERCENTAGE },
-                 rows: rows.map((row, rowIndex) => 
-                     new TableRow({
-                         children: row.map(cellText => 
-                             new TableCell({
-                                 children: [new Paragraph({
-                                     children: parseInlineStyles(cellText, font, fontSize, "#000000") as any,
-                                     alignment: AlignmentType.CENTER
-                                 })],
-                                 shading: rowIndex === 0 ? { fill: "F3F4F6", type: ShadingType.CLEAR } : undefined,
-                                 verticalAlign: VerticalAlign.CENTER,
-                                 borders: {
-                                     top: { style: BorderStyle.SINGLE, size: 1, color: "CBD5E1" },
-                                     bottom: { style: BorderStyle.SINGLE, size: 1, color: "CBD5E1" },
-                                     left: { style: BorderStyle.SINGLE, size: 1, color: "CBD5E1" },
-                                     right: { style: BorderStyle.SINGLE, size: 1, color: "CBD5E1" },
-                                 },
-                                 margins: { top: 100, bottom: 100, left: 100, right: 100 }
-                             })
-                         )
-                     })
-                 )
-             }));
-        }
+        i++;
+      }
+      sections.push(new Table({
+        rows: tableRows,
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        alignment: AlignmentType.CENTER
+      }));
     }
+    // 5. 处理块级公式
+    else if (line.startsWith('$$')) {
+      let formula = line.replace(/\$\$/g, '');
+      if (formula === '') {
+        i++;
+        while (i < lines.length && !lines[i].trim().startsWith('$$')) {
+          formula += lines[i] + ' ';
+          i++;
+        }
+      }
+      // 使用 DocxMath 和 MathRun，让 Word 识别这是公式区域
+      sections.push(new Paragraph({
+        children: [
+            new DocxMath({
+                children: [new MathRun(formula.trim())]
+            })
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 300, after: 300 }
+      }));
+      i++;
+    }
+    // 6. 处理引用
+    else if (line.startsWith('>')) {
+      sections.push(new Paragraph({
+        children: parseInlineStyles(line.replace(/^>\s*/, ''), font, fontSize, "555555") as any,
+        indent: { left: 720 },
+        spacing: { after: 200 },
+        shading: { fill: "F1F5F9", type: ShadingType.CLEAR }
+      }));
+      i++;
+    }
+    // 7. 普通段落
     else {
-      // Normal paragraph
-      if (line.length > 0) {
+      if (line !== '') {
         sections.push(new Paragraph({
-          children: parseInlineStyles(line, font, fontSize, textColor) as any,
-          spacing: { line: style.lineSpacing * 240, before: style.paragraphSpacing, after: style.paragraphSpacing },
-          alignment: align
+          children: parseInlineStyles(line, font, fontSize, style.textColor) as any,
+          alignment: align,
+          spacing: { 
+              after: style.paragraphSpacing, 
+              line: style.lineSpacing * 240, // docx uses 240 for 1 line
+              lineRule: "auto"
+          }
         }));
       }
       i++;
@@ -460,18 +373,20 @@ export async function downloadDocx(markdown: string, template: WordTemplate, cus
 
   const doc = new Document({
     sections: [{
-      properties: {},
+      properties: {
+        page: {
+          margin: { top: "2.54cm", bottom: "2.54cm", left: "3.18cm", right: "3.18cm" }
+        }
+      },
       children: sections,
     }],
   });
 
   const blob = await Packer.toBlob(doc);
-  const url = URL.createObjectURL(blob);
+  const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `document_${Date.now()}.docx`;
-  document.body.appendChild(a);
+  a.download = `AI_Doc_${template}_${new Date().getTime()}.docx`;
   a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  window.URL.revokeObjectURL(url);
 }
