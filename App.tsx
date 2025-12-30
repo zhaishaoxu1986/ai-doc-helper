@@ -46,6 +46,19 @@ $$
 - **一键排版**：自动修正中英文间距，提升专业感。
 - **公众号适配**：右侧预览区支持一键复制为微信公众号格式。
 
+### 5. 代码
+
+支持代码高亮显示，导出 Word 时会保持代码块格式：
+
+\`\`\`python
+class DocHelper:
+    def __init__(self):
+        self.name = "AI Doc Helper"
+    
+    def greet(self):
+        print(f"Welcome to {self.name}!")
+\`\`\`
+
 > 提示：您可以随意更换上面的图片链接。点击“AI 助手”体验一键润色，支持 Ctrl+Z 撤销。`,
     isProcessing: false,
     progress: 0
