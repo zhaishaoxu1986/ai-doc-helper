@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
 import JSZip from 'jszip';
 import { getModelConfig } from '../../utils/settings';
-import { generateContent } from '../../utils/aiHelper';
+import { generateContent, generateContentStream } from '../../utils/aiHelper';
 import { Type } from '@google/genai';
 import { downloadDocx } from '../../utils/converter';
 import { WordTemplate } from '../../types';
@@ -419,16 +419,26 @@ const MultiDocProcessor: React.FC = () => {
   const processReport = async () => {
     if (files.length === 0) return;
     setIsProcessing(true);
+    setResultReport('');
+    
     try {
       const combinedContent = files.map((f, idx) => `--- Report ${idx + 1} (${f.file.name}) ---\n${f.contentSnippet}`).join('\n\n');
       const prompt = `${reportPrompt}\n\nReports Content:\n${combinedContent}`;
-      const response = await generateContent({
+      
+      // Use streaming for real-time output
+      const stream = generateContentStream({
         apiKey: config.apiKey,
         model: config.model,
         baseUrl: config.baseUrl,
         prompt: prompt
       });
-      setResultReport(response);
+      
+      let fullText = '';
+      for await (const chunk of stream) {
+        fullText += chunk;
+        setResultReport(fullText);
+      }
+      
       setFiles(prev => prev.map(f => ({ ...f, status: 'done' })));
     } catch (e) {
       console.error(e);
@@ -497,14 +507,20 @@ const MultiDocProcessor: React.FC = () => {
 
           const prompt = `${customPrompt}\n\nDocuments to Analyze:\n${combinedDocs}`;
           
-          const response = await generateContent({
+          // Use streaming for real-time output
+          const stream = generateContentStream({
               apiKey: config.apiKey,
               model: config.model,
               baseUrl: config.baseUrl,
               prompt: prompt
           });
           
-          setResultReport(response);
+          let fullText = '';
+          for await (const chunk of stream) {
+              fullText += chunk;
+              setResultReport(fullText);
+          }
+          
           setFiles(prev => prev.map(f => ({ ...f, status: 'done' })));
 
       } catch (e) {

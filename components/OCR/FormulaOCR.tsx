@@ -294,9 +294,27 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
       
       let sampleDataUrl = '';
       try {
-          if (mode === 'formula') sampleDataUrl = createFormulaSampleImage();
-          else if (mode === 'table') sampleDataUrl = createTableSampleImage();
-          else if (mode === 'handwriting') sampleDataUrl = createHandwritingSampleImage();
+          // For handwriting mode, try to load from file first
+          if (mode === 'handwriting') {
+              try {
+                  const response = await fetch('/ocr/handwrite.jpg');
+                  if (response.ok) {
+                      const blob = await response.blob();
+                      sampleDataUrl = await processImage(blob);
+                  } else {
+                      // Fallback to canvas generation if file not found
+                      sampleDataUrl = createHandwritingSampleImage();
+                  }
+              } catch (err) {
+                  // Fallback to canvas generation if fetch fails
+                  console.warn('Failed to load handwriting sample image, using canvas generation');
+                  sampleDataUrl = createHandwritingSampleImage();
+              }
+          } else if (mode === 'formula') {
+              sampleDataUrl = createFormulaSampleImage();
+          } else if (mode === 'table') {
+              sampleDataUrl = createTableSampleImage();
+          }
           
           if (sampleDataUrl) {
               setImage(sampleDataUrl);
