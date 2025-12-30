@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { saveUserSettings, getUserSettings, AVAILABLE_MODELS, getModelConfig, THEME_PRESETS, saveTheme, getTheme } from '../../utils/settings';
+import { saveUserSettings, getUserSettings, AVAILABLE_MODELS, getModelConfig, THEME_PRESETS, saveTheme, getTheme, saveSerperKey } from '../../utils/settings';
 
 const UserCenter: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -9,6 +9,7 @@ const UserCenter: React.FC = () => {
   // Settings State
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
+  const [serperKey, setSerperKey] = useState(''); // New state for Serper Key
   
   // Text Model State
   const [textModel, setTextModel] = useState('');
@@ -29,6 +30,7 @@ const UserCenter: React.FC = () => {
       const settings = getUserSettings();
       setApiKey(settings.apiKey);
       setBaseUrl(settings.baseUrl);
+      setSerperKey(settings.serperKey); // Load Serper Key
       
       // Initialize Text Model
       const storedModel = settings.model;
@@ -73,6 +75,7 @@ const UserCenter: React.FC = () => {
 
     saveUserSettings(apiKey, finalTextModel, finalOcrModel, useCustomTextModel ? baseUrl.trim() : baseUrl.trim());
     saveTheme(activeTheme);
+    saveSerperKey(serperKey); // Save Serper Key
 
     // Dispatch custom event to notify App.tsx to reload theme immediately
     window.dispatchEvent(new Event('theme-change'));
@@ -289,6 +292,16 @@ const UserCenter: React.FC = () => {
                                     value={baseUrl}
                                     onChange={(e) => setBaseUrl(e.target.value)}
                                     placeholder={(!baseUrl && !useCustomTextModel) ? "使用预设模型的默认 URL" : "覆盖默认 URL"}
+                                    className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-mono placeholder:text-slate-400 focus:border-[var(--primary-color)] outline-none text-slate-900"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Serper API Key</label>
+                                <input 
+                                    type="password" 
+                                    value={serperKey}
+                                    onChange={(e) => setSerperKey(e.target.value)}
+                                    placeholder="使用默认 Key"
                                     className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-mono placeholder:text-slate-400 focus:border-[var(--primary-color)] outline-none text-slate-900"
                                 />
                             </div>

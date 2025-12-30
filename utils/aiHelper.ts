@@ -6,6 +6,7 @@ export interface AIRequest {
   model: string;
   baseUrl?: string; // If present, use OpenAI compatible fetch
   prompt: string;
+  messages?: any[]; // Optional: complete message history for chat/agent mode
   systemInstruction?: string;
   image?: string; // base64 string without data URI prefix (for Gemini) or full handling
   mimeType?: string; // e.g. 'image/png' or 'image/jpeg'
@@ -22,8 +23,17 @@ export async function generateContent(req: AIRequest): Promise<string> {
   // 1. OpenAI Compatible Mode (For Alibaba Qwen, DeepSeek, etc.)
   // ---------------------------------------------------------
   if (req.baseUrl) {
-    const messages: any[] = [];
+    let messages: any[] = [];
     
+    // If explicit messages history is provided, use it as base
+    if (req.messages && req.messages.length > 0) {
+        messages = [...req.messages];
+        // If there is also a prompt, add it as a user message
+        if (req.prompt) {
+             messages.push({ role: 'user', content: req.prompt });
+        }
+    } else {
+        // Standard single-turn construction
     // System Prompt
     if (req.systemInstruction) {
       messages.push({ role: 'system', content: req.systemInstruction });
@@ -33,7 +43,6 @@ export async function generateContent(req: AIRequest): Promise<string> {
     const content: any[] = [{ type: 'text', text: req.prompt }];
     
     if (req.image) {
-      // OpenAI/Compatible standard usually expects data URI for images
       content.push({
         type: 'image_url',
         image_url: { url: `data:${mimeType};base64,${req.image}` }
@@ -41,6 +50,7 @@ export async function generateContent(req: AIRequest): Promise<string> {
     }
     
     messages.push({ role: 'user', content });
+    }
 
     const body: any = {
       model: req.model,
@@ -130,22 +140,40 @@ export async function* generateContentStream(req: AIRequest): AsyncGenerator<str
     // 1. OpenAI Compatible Streaming
     // ---------------------------------------------------------
     if (req.baseUrl) {
-      const messages: any[] = [];
-      if (req.systemInstruction) messages.push({ role: 'system', content: req.systemInstruction });
-      const content: any[] = [{ type: 'text', text: req.prompt }];
-      if (req.image) {
-        content.push({
-          type: 'image_url',
-          image_url: { url: `data:${mimeType};base64,${req.image}` }
-        });
+      let messages: any[] = [];
+      
+      if (req.messages && req.messages.length > 0) {
+          messages = [...req.messages];
+          if (req.prompt) {
+               messages.push({ role: 'user', content: req.prompt });
+          }
+      } else {
+        if (req.systemInstruction) messages.push({ role: 'system', content: req.systemInstruction });
+        const content: any[] = [{ type: 'text', text: req.prompt }];
+        if (req.image) {
+          content.push({
+            type: 'image_url',
+            image_url: { url: `data:${mimeType};base64,${req.image}` }
+          });
+        }
+        messages.push({ role: 'user', content });
       }
-      messages.push({ role: 'user', content });
   
       const body: any = {
         model: req.model,
         messages: messages,
         stream: true 
       };
+
+      if (req.jsonSchema) {
+        body.response_format = { type: "json_object" };
+        // Ensure the last message prompts for JSON if not already handled
+        const lastMsg = messages[messages.length - 1];
+        const jsonInstruction = "\n\nPlease respond in valid JSON format.";
+        if (typeof lastMsg.content === 'string' && !lastMsg.content.includes(jsonInstruction)) {
+            lastMsg.content += jsonInstruction;
+        }
+      }
   
       const cleanBaseUrl = req.baseUrl.replace(/\/+$/, '');
       const endpoint = cleanBaseUrl.endsWith('/chat/completions') 

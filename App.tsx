@@ -5,7 +5,8 @@ import MarkdownEditor from './components/Editor/MarkdownEditor';
 import WordPreview from './components/Preview/WordPreview';
 import FormulaOCR from './components/OCR/FormulaOCR';
 import MultiDocProcessor from './components/MultiDoc/MultiDocProcessor';
-import { AppView, DocumentState } from './types';
+import AIResearch from './components/Research/AIResearch';
+import { AppView, DocumentState, ResearchState } from './types';
 import { getTheme } from './utils/settings';
 
 const App: React.FC = () => {
@@ -64,6 +65,14 @@ class DocHelper:
     progress: 0
   });
 
+  const [researchState, setResearchState] = useState<ResearchState>({
+    topic: '',
+    isRunning: false,
+    logs: [],
+    report: '',
+    sources: []
+  });
+
   // Load and apply theme on mount
   useEffect(() => {
     const applyTheme = () => {
@@ -119,6 +128,21 @@ class DocHelper:
     setView(AppView.EDITOR);
   }, []);
 
+  // We need a specific handler for Replacing content vs Appending
+  const handleReplaceEditor = useCallback((newContent: string) => {
+      setDocState(prev => ({ ...prev, markdown: newContent }));
+      setView(AppView.EDITOR);
+  }, []);
+
+  const handleResearchStateUpdate = useCallback((updates: Partial<ResearchState> | ((prev: ResearchState) => ResearchState)) => {
+    setResearchState(prev => {
+      if (typeof updates === 'function') {
+        return updates(prev);
+      }
+      return { ...prev, ...updates };
+    });
+  }, []);
+
   return (
     <div className="flex flex-col h-screen bg-[#F7F9FB] text-slate-800">
       <Header currentView={view} setView={setView} />
@@ -152,6 +176,17 @@ class DocHelper:
         {view === AppView.MULTI_DOC && (
           <div className="h-full animate-in slide-in-from-bottom-4 duration-300 overflow-y-auto">
             <MultiDocProcessor />
+          </div>
+        )}
+
+        {view === AppView.AI_RESEARCH && (
+          <div className="h-full animate-in slide-in-from-bottom-4 duration-300 overflow-y-auto">
+            <AIResearch 
+              state={researchState}
+              onUpdateState={handleResearchStateUpdate}
+              onInsert={insertAtCursor} 
+              onReplace={handleReplaceEditor} 
+            />
           </div>
         )}
       </main>

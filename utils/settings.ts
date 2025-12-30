@@ -104,14 +104,27 @@ export const getTheme = () => {
   return THEME_PRESETS.find(t => t.id === stored) || THEME_PRESETS[0];
 };
 
+export const DEFAULT_SERPER_KEY = '1b4c94cbc459cbc57aaab46340f6dfcd6edcadde';
+
 export const getUserSettings = () => {
   return {
     apiKey: localStorage.getItem('user_api_key') || '',
     model: localStorage.getItem('user_model') || AVAILABLE_MODELS[0].id,
     ocrModel: localStorage.getItem('user_model_ocr') || '',
     baseUrl: localStorage.getItem('user_base_url') || '',
-    theme: localStorage.getItem('user_theme') || 'blue'
+    theme: localStorage.getItem('user_theme') || 'blue',
+    serperKey: localStorage.getItem('serper_api_key') || ''
   };
+};
+
+export const getSerperKey = () => localStorage.getItem('serper_api_key') || DEFAULT_SERPER_KEY;
+
+export const saveSerperKey = (key: string) => {
+    if (key && key.trim()) {
+        localStorage.setItem('serper_api_key', key.trim());
+    } else {
+        localStorage.removeItem('serper_api_key');
+    }
 };
 
 export const getEffectiveApiKey = () => getModelConfig('text').apiKey;
