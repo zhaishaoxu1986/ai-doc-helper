@@ -35,19 +35,13 @@ $$
 | GPT-3 | Decoder Only | 175B | OpenAI |
 | LLaMA | Decoder Only | 65B | Meta |
 
-### 3. Transformer 架构图
+### 3. 图片支持 (Image)
 
 支持图片嵌入，导出 Word 时会自动下载并嵌入文档（保持原始比例）：
 
 ![Transformer Architecture](https://upload.wikimedia.org/wikipedia/commons/thumb/3/34/Transformer%2C_full_architecture.png/1280px-Transformer%2C_full_architecture.png)
 
-### 4. 功能特性
-
-- **AI 视觉**：截图粘贴即可识别数学公式、表格和手写体。
-- **一键排版**：自动修正中英文间距，提升专业感。
-- **公众号适配**：右侧预览区支持一键复制为微信公众号格式。
-
-### 5. 代码
+### 4. 代码支持(Code)
 
 支持代码高亮显示，导出 Word 时会保持代码块格式：
 
@@ -59,6 +53,14 @@ class DocHelper:
     def greet(self):
         print(f"Welcome to {self.name}!")
 \`\`\`
+
+### 5. 功能特性
+
+- **AI 视觉**：截图粘贴即可识别数学公式、表格和手写体。
+- **一键排版**：自动修正中英文间距，提升专业感。
+- **公众号适配**：右侧预览区支持一键复制为微信公众号格式。
+
+
 
 > 提示：您可以随意更换上面的图片链接。点击“AI 助手”体验一键润色，支持 Ctrl+Z 撤销。`,
     isProcessing: false,
