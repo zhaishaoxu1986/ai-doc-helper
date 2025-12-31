@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import mammoth from 'mammoth';
 import ReactMarkdown from 'react-markdown';
@@ -9,6 +8,7 @@ import { generateContent, generateContentStream } from '../../utils/aiHelper';
 import { Type } from '@google/genai';
 import { downloadDocx } from '../../utils/converter';
 import { WordTemplate } from '../../types';
+import { addHistoryItem } from '../../utils/historyManager';
 
 // PDF & Excel Imports
 // Note: These libraries are loaded via <script> tags in index.html to expose global variables
@@ -108,17 +108,6 @@ const MultiDocProcessor: React.FC = () => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [resultReport, setResultReport] = useState<string>('');
   
-  // History Management
-  interface HistoryItem {
-    id: string;
-    mode: Mode;
-    timestamp: number;
-    result: string;
-    fileCount: number;
-  }
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
-  
   // Research Mode
   const [templates, setTemplates] = useState<ResearchTemplate[]>(RESEARCH_TEMPLATES);
   const [activeTemplate, setActiveTemplate] = useState<ResearchTemplate>(RESEARCH_TEMPLATES[0]);
@@ -161,16 +150,6 @@ const MultiDocProcessor: React.FC = () => {
             console.error("Failed to load custom templates", e);
         }
     }
-    
-    // Load history
-    const savedHistory = localStorage.getItem('multidoc_history');
-    if (savedHistory) {
-        try {
-            setHistory(JSON.parse(savedHistory));
-        } catch (e) {
-            console.error("Failed to load history", e);
-        }
-    }
   }, []);
 
   const handleCreateTemplate = () => {
@@ -182,7 +161,7 @@ const MultiDocProcessor: React.FC = () => {
           id: `custom-${Date.now()}`,
           title: newTemplateTitle.trim(),
           prompt: newTemplatePrompt.trim(),
-          icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z', // Generic icon
+          icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z',
           isCustom: true
       };
       const updatedTemplates = [...templates, newTpl];
@@ -385,7 +364,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
   };
 
   const loadSampleFiles = async () => {
-    let samples = [];
+    let samples: any[] = [];
     
     // 清除旧数据
     setFiles([]);
@@ -481,28 +460,21 @@ Please respond with ONLY complete prompt text, nothing else.`;
   };
   
   const saveToHistory = (currentMode: Mode, result: string) => {
-    const newItem: HistoryItem = {
-      id: Date.now().toString(),
-      mode: currentMode,
-      timestamp: Date.now(),
-      result: result,
-      fileCount: files.length
-    };
-    
-    const newHistory = [newItem, ...history].slice(0, 5); // Keep only last 5
-    setHistory(newHistory);
-    localStorage.setItem('multidoc_history', JSON.stringify(newHistory));
-  };
-  
-  const loadFromHistory = (item: HistoryItem) => {
-    setResultReport(item.result);
-    setShowHistory(false);
-  };
-  
-  const deleteHistoryItem = (id: string) => {
-    const newHistory = history.filter(h => h.id !== id);
-    setHistory(newHistory);
-    localStorage.setItem('multidoc_history', JSON.stringify(newHistory));
+    // 使用新的统一历史记录系统
+    addHistoryItem({
+      module: 'multidoc',
+      status: 'success',
+      title: currentMode === 'rename' ? `智能重命名 - ${files.length} 个文件` :
+             currentMode === 'report' ? `周报聚合 - ${files.length} 个报告` :
+             currentMode === 'deep_research' ? `深度调研 - ${activeTemplate.title}` :
+             '作业核对',
+      preview: result.slice(0, 200) + (result.length > 200 ? '...' : ''),
+      fullResult: result,
+      metadata: {
+        docMode: currentMode,
+        fileCount: files.length
+      }
+    });
   };
 
   // --- Process Functions ---
@@ -527,13 +499,26 @@ Please respond with ONLY complete prompt text, nothing else.`;
       });
 
       let jsonStr = response.trim().replace(/```json|```/g, '');
-      const mapping = JSON.parse(jsonStr); 
+      const mapping = JSON.parse(jsonStr);
 
       if (Array.isArray(mapping)) {
         setFiles(prev => prev.map(f => {
           const match = mapping.find((m: any) => m.originalName === f.file.name);
           return match ? { ...f, newName: match.newName, reason: match.reason, status: 'done' } : f;
         }));
+        
+        // 保存到统一历史记录
+        addHistoryItem({
+          module: 'multidoc',
+          status: 'success',
+          title: `智能重命名 - ${files.length} 个文件`,
+          preview: mapping.slice(0, 3).map((m: any) => `${m.originalName} → ${m.newName}`).join('\n') + (mapping.length > 3 ? '\n...' : ''),
+          fullResult: JSON.stringify(mapping),
+          metadata: {
+            docMode: 'rename',
+            fileCount: files.length
+          }
+        });
       }
     } catch (e) {
       console.error(e);
@@ -653,6 +638,19 @@ Please respond with ONLY complete prompt text, nothing else.`;
           const result = JSON.parse(jsonStr);
           setCheckResult(result);
           setFiles(prev => prev.map(f => ({ ...f, status: 'done' })));
+          
+          // 保存到统一历史记录
+          addHistoryItem({
+            module: 'multidoc',
+            status: 'success',
+            title: `作业核对 - ${rosterText.split('\n').length} 人名单`,
+            preview: `已提交: ${result.submitted.length} 人, 未交: ${result.missing.length} 人`,
+            fullResult: JSON.stringify(result),
+            metadata: {
+              docMode: 'missing',
+              fileCount: files.length
+            }
+          });
 
       } catch (e) {
           console.error(e);
@@ -887,21 +885,6 @@ Please respond with ONLY complete prompt text, nothing else.`;
                 </p>
             </div>
             <div className="flex space-x-3 w-full md:w-auto flex-wrap gap-y-2">
-                {/* History Button */}
-                {(mode === 'report' || mode === 'deep_research') && (
-                    <button
-                        onClick={() => setShowHistory(!showHistory)}
-                        className="flex-1 md:flex-none flex items-center justify-center px-3 py-2 text-xs font-bold text-slate-500 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors relative"
-                    >
-                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                        历史记录
-                        {history.length > 0 && (
-                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-[var(--primary-color)] text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-                                {history.length}
-                            </span>
-                        )}
-                    </button>
-                )}
                  <button
                     onClick={openSettings}
                     className="flex-1 md:flex-none flex items-center justify-center px-3 py-2 text-xs font-bold text-slate-500 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
@@ -1144,7 +1127,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
                             {!checkResult ? (
                                 <div className="flex-1 flex flex-col items-center justify-center text-slate-300">
                                     <svg className="w-16 h-16 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                    <p className="text-sm">点击左侧“开始核对名单”查看结果</p>
+                                    <p className="text-sm">点击左侧"开始核对名单"查看结果</p>
                                 </div>
                             ) : (
                                 <div className="flex-1 overflow-y-auto p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1278,78 +1261,6 @@ Please respond with ONLY complete prompt text, nothing else.`;
         </div>
       )}
 
-     {/* History Modal */}
-     {showHistory && (
-         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-sm">
-             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-200">
-                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                     <h3 className="font-bold text-slate-800 text-lg flex items-center">
-                         <svg className="w-5 h-5 mr-2 text-[var(--primary-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                         历史记录
-                     </h3>
-                     <button onClick={() => setShowHistory(false)} className="text-slate-400 hover:text-slate-600">
-                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                     </button>
-                 </div>
-                 <div className="p-6 max-h-[600px] overflow-y-auto custom-scrollbar">
-                     {history.length === 0 ? (
-                         <div className="text-center py-12 text-slate-400">
-                             <svg className="w-16 h-16 mx-auto mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                             <p className="text-sm">暂无历史记录</p>
-                         </div>
-                     ) : (
-                         <div className="space-y-3">
-                             {history.map((item) => (
-                                 <div
-                                     key={item.id}
-                                     className="bg-slate-50 border border-slate-200 rounded-xl p-4 hover:shadow-md hover:border-[var(--primary-color)] transition-all group"
-                                 >
-                                     <div className="flex justify-between items-start mb-2">
-                                         <div className="flex items-center space-x-2">
-                                             <span className={`px-2 py-1 rounded text-xs font-bold ${
-                                                 item.mode === 'report' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
-                                             }`}>
-                                                 {item.mode === 'report' ? '📊 周报' : '🔬 深度调研'}
-                                             </span>
-                                             <span className="text-xs text-slate-500">
-                                                 {new Date(item.timestamp).toLocaleString('zh-CN')}
-                                             </span>
-                                             <span className="text-xs text-slate-400">
-                                                 {item.fileCount} 个文件
-                                             </span>
-                                         </div>
-                                         <div className="flex items-center space-x-2">
-                                             <button
-                                                 onClick={() => deleteHistoryItem(item.id)}
-                                                 className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-                                                 title="删除"
-                                             >
-                                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                             </button>
-                                         </div>
-                                     </div>
-                                     <div className="bg-white border border-slate-100 rounded-lg p-3 text-sm text-slate-600 max-h-24 overflow-y-auto custom-scrollbar line-clamp-4">
-                                         {item.result.substring(0, 200)}...
-                                     </div>
-                                     <button
-                                         onClick={() => loadFromHistory(item)}
-                                         className="mt-3 w-full py-2 bg-white border border-[var(--primary-color)] text-[var(--primary-color)] hover:bg-[var(--primary-color)] hover:text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center"
-                                     >
-                                         <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                                         加载此记录
-                                     </button>
-                                 </div>
-                             ))}
-                         </div>
-                     )}
-                 </div>
-                 <div className="bg-slate-50 px-6 py-3 border-t border-slate-100 text-center">
-                     <p className="text-[10px] text-slate-400">* 历史记录仅保存在本地浏览器，最多保留 5 条</p>
-                 </div>
-             </div>
-         </div>
-     )}
-
      {/* Create Template Modal */}
       {isCreatingTemplate && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-sm">
@@ -1362,7 +1273,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
                 </div>
                 <div className="p-6 space-y-4">
                     <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">功能名称 (Title)</label>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">功能名称</label>
                         <input 
                             type="text"
                             className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none bg-white"
@@ -1372,7 +1283,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">指令 (Prompt)</label>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">指令</label>
                         <textarea 
                             className="w-full h-40 p-3 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none resize-none font-mono bg-slate-50 text-slate-700"
                             placeholder="告诉 AI 应该如何分析上传的文档..."
@@ -1426,7 +1337,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
                     </div>
                 </div>
             </div>
-          </div>
+        </div>
       )}
     </div>
   );

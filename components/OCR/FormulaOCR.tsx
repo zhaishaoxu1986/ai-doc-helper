@@ -9,6 +9,7 @@ import { getModelConfig } from '../../utils/settings';
 import { generateContent, generateContentStream } from '../../utils/aiHelper';
 import { downloadDocx } from '../../utils/converter';
 import { WordTemplate } from '../../types';
+import { addHistoryItem } from '../../utils/historyManager';
 
 // Declare globals for PDF/Excel support
 declare const pdfjsLib: any;
@@ -704,6 +705,20 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
 
             setPdfResult({ markdown: fullMarkdown, extractedImages });
             setPdfProgress('转换完成！');
+            
+            // 保存到统一历史记录
+            addHistoryItem({
+                module: 'ocr',
+                status: 'success',
+                title: `PDF 转换 - ${pdfFile?.name}`,
+                preview: fullMarkdown.slice(0, 200) + (fullMarkdown.length > 200 ? '...' : ''),
+                fullResult: fullMarkdown,
+                metadata: {
+                    ocrMode: 'pdf',
+                    fileCount: images.length,
+                    extractedCount: extractedImages.length
+                }
+            });
 
         } catch (err: any) {
             console.error('PDF Error:', err);
@@ -737,8 +752,22 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
             prompt: formulaPrompt,
             jsonSchema: { type: Type.OBJECT, properties: { formulas: {type:Type.ARRAY, items: {type:Type.OBJECT, properties: { inline: {type:Type.STRING}, block: {type:Type.STRING}, raw: {type:Type.STRING}, html: {type:Type.STRING} }}}} }
           });
-          setFormulaResult(parseFormulaJsonSafe(responseText));
+          const result = parseFormulaJsonSafe(responseText);
+          setFormulaResult(result);
           setActiveFormulaTab('block');
+          
+          // 保存到统一历史记录
+          addHistoryItem({
+              module: 'ocr',
+              status: 'success',
+              title: `公式识别 - 检测到 ${result.count} 个公式`,
+              preview: result.data.map(f => f.block).join('\n').slice(0, 200) + (result.data.map(f => f.block).join('\n').length > 200 ? '...' : ''),
+              fullResult: JSON.stringify(result),
+              metadata: {
+                  ocrMode: 'formula',
+                  extractedCount: result.count
+              }
+          });
       } else if (mode === 'table') {
           const responseText = await generateContent({
               apiKey: config.apiKey,
@@ -750,6 +779,18 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
           });
           setTableResult({ markdown: responseText, html: responseText });
           setActiveTableTab('preview');
+          
+          // 保存到统一历史记录
+          addHistoryItem({
+              module: 'ocr',
+              status: 'success',
+              title: `表格识别 - ${responseText.slice(0, 30).replace(/\n/g, '')}...`,
+              preview: responseText.slice(0, 200) + (responseText.length > 200 ? '...' : ''),
+              fullResult: responseText,
+              metadata: {
+                  ocrMode: 'table'
+              }
+          });
       } else if (mode === 'handwriting') {
           const responseText = await generateContent({
               apiKey: config.apiKey,
@@ -761,6 +802,18 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
           });
           setHandwritingResult({ markdown: responseText, html: responseText });
           setActiveHandwritingTab('preview');
+          
+          // 保存到统一历史记录
+          addHistoryItem({
+              module: 'ocr',
+              status: 'success',
+              title: `手写体识别 - ${responseText.slice(0, 30).replace(/\n/g, '')}...`,
+              preview: responseText.slice(0, 200) + (responseText.length > 200 ? '...' : ''),
+              fullResult: responseText,
+              metadata: {
+                  ocrMode: 'handwriting'
+              }
+          });
       }
     } catch (err: any) {
       console.error('OCR Error:', err);

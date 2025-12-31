@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { generateContent, generateContentStream } from '../../utils/aiHelper';
 import { getModelConfig, getSerperKey, saveSerperKey } from '../../utils/settings';
 import { LogEntry, SearchResult, ResearchState } from '../../types';
+import { addHistoryItem } from '../../utils/historyManager';
 
 interface AIResearchProps {
   state: ResearchState;
@@ -449,11 +450,26 @@ You must strictly respond in JSON format with NO other text.
 
         // Execute Tool
         if (action.tool === 'finish') {
-          onUpdateState({ 
-            isRunning: false, 
-            report: action.tool_input
+          const finalReport = action.tool_input;
+          onUpdateState({
+            isRunning: false,
+            report: finalReport
           });
           addLog('success', '调研完成，报告已生成。');
+          
+          // 保存到统一历史记录
+          addHistoryItem({
+            module: 'research',
+            status: 'success',
+            title: activeTopic,
+            preview: finalReport.slice(0, 200) + (finalReport.length > 200 ? '...' : ''),
+            fullResult: finalReport,
+            metadata: {
+              researchTopic: activeTopic,
+              logCount: state.logs.length,
+              sourceCount: state.sources.length
+            }
+          });
           break;
         } else if (action.tool === 'search') {
           const result = await searchTool(action.tool_input);
@@ -523,14 +539,44 @@ You must strictly respond in JSON format with NO other text.
           try {
             const cleanJson = finalResponse.replace(/```json/g, '').replace(/```/g, '').trim();
             const finalAction = JSON.parse(cleanJson);
-            onUpdateState({ 
-              isRunning: false, 
-              report: finalAction.tool_input || finalResponse
+            const finalReport = finalAction.tool_input || finalResponse;
+            onUpdateState({
+              isRunning: false,
+              report: finalReport
             });
             addLog('success', '调研结束。');
+            
+            // 保存到统一历史记录
+            addHistoryItem({
+              module: 'research',
+              status: 'success',
+              title: activeTopic + ' (达到步骤上限)',
+              preview: finalReport.slice(0, 200) + (finalReport.length > 200 ? '...' : ''),
+              fullResult: finalReport,
+              metadata: {
+                researchTopic: activeTopic,
+                logCount: state.logs.length,
+                sourceCount: state.sources.length
+              }
+            });
           } catch (e) {
-            onUpdateState({ isRunning: false, report: finalResponse });
+            const finalReport = finalResponse;
+            onUpdateState({ isRunning: false, report: finalReport });
             addLog('success', '调研结束。');
+            
+            // 保存到统一历史记录
+            addHistoryItem({
+              module: 'research',
+              status: 'success',
+              title: activeTopic + ' (异常结束)',
+              preview: finalReport.slice(0, 200) + (finalReport.length > 200 ? '...' : ''),
+              fullResult: finalReport,
+              metadata: {
+                researchTopic: activeTopic,
+                logCount: state.logs.length,
+                sourceCount: state.sources.length
+              }
+            });
           }
         }
       }

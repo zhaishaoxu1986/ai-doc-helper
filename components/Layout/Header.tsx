@@ -3,7 +3,9 @@ import React, { useState } from 'react';
 import { AppView } from '../../types';
 import UserCenter from './UserCenter';
 import AboutModal from './AboutModal';
+import HistoryPanel from './HistoryPanel';
 import { getModelConfig } from '../../utils/settings';
+import { UnifiedHistoryItem } from '../../utils/historyManager';
 
 interface HeaderProps {
   currentView: AppView;
@@ -13,8 +15,25 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ currentView, setView }) => {
   const [showAbout, setShowAbout] = useState(false);
   const [logoError, setLogoError] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const activeConfig = getModelConfig(currentView === AppView.AI_VISION ? 'ocr' : 'text');
+
+  const handleHistoryItemClick = (item: UnifiedHistoryItem) => {
+    setShowHistory(false);
+    // 根据历史记录类型切换到相应页面
+    switch (item.module) {
+      case 'ocr':
+        setView(AppView.AI_VISION);
+        break;
+      case 'multidoc':
+        setView(AppView.MULTI_DOC);
+        break;
+      case 'research':
+        setView(AppView.AI_RESEARCH);
+        break;
+    }
+  };
 
   const tabs = [
     { id: AppView.EDITOR, name: '编辑器 (Editor)', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
@@ -30,20 +49,21 @@ const Header: React.FC<HeaderProps> = ({ currentView, setView }) => {
           {/* Logo 区域 */}
           <div className="w-8 h-8 relative flex items-center justify-center">
             {!logoError ? (
-              <img 
-                src="/logo.png" 
-                alt="Logo" 
+              <img
+                src="/logo.png"
+                alt="Logo"
                 className="w-full h-full object-contain"
                 onError={() => setLogoError(true)}
               />
             ) : (
               <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm transition-transform group-hover:scale-105" style={{ background: 'linear-gradient(to top right, var(--primary-color), var(--primary-hover))' }}>
                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                 </svg>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
               </div>
             )}
           </div>
+          
           <h1 className="text-lg font-bold tracking-tight text-slate-800 hidden md:block hover:text-[var(--primary-color)] transition-colors font-mono">AI Doc Helper</h1>
         </div>
 
@@ -73,7 +93,18 @@ const Header: React.FC<HeaderProps> = ({ currentView, setView }) => {
              <span className="text-[10px] font-bold text-[var(--primary-color)] whitespace-nowrap">当前引擎: {activeConfig.modelName}</span>
           </div>
 
-          <button 
+          {/* 历史记录按钮 - 移到右边 */}
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowHistory(!showHistory); }}
+            className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-[var(--primary-color)] transition-all relative"
+            title="历史记录"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+
+          <button
             onClick={() => setShowAbout(true)}
             className="w-8 h-8 rounded-full bg-slate-50 border border-slate-200 text-slate-400 hover:text-[var(--primary-color)] hover:border-[var(--primary-50)] hover:bg-[var(--primary-50)] flex items-center justify-center transition-all font-bold text-sm"
             title="关于我们 & 帮助"
@@ -86,6 +117,7 @@ const Header: React.FC<HeaderProps> = ({ currentView, setView }) => {
       </header>
 
       <AboutModal isOpen={showAbout} onClose={() => setShowAbout(false)} />
+      <HistoryPanel isOpen={showHistory} onClose={() => setShowHistory(false)} onItemClick={handleHistoryItemClick} />
     </>
   );
 };
