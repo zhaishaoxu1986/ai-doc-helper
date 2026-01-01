@@ -22,7 +22,6 @@ interface FormulaData {
   inline: string;
   block: string;
   raw: string;
-  html: string;
 }
 
 interface FormulaResult {
@@ -73,16 +72,46 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
   const [pdfActiveTab, setPdfActiveTab] = useState<'markdown' | 'word'>('markdown');
   const [pdfProgress, setPdfProgress] = useState<string>(''); // For streaming status
   const [streamingMarkdown, setStreamingMarkdown] = useState<string>(''); // Accumulate streaming content
-
+  
+  // Streaming State for Table and Handwriting
+  const [streamingText, setStreamingText] = useState<string>(''); // For table/handwriting streaming
+  
+  // Debug State - 存储 AI 原始输出
+  const [rawAiOutput, setRawAiOutput] = useState<string>('');
+  
   // UI State
-  const [activeFormulaTab, setActiveFormulaTab] = useState<'block' | 'inline' | 'raw' | 'html'>('block');
-  const [activeTableTab, setActiveTableTab] = useState<'preview' | 'markdown' | 'html'>('preview');
-  const [activeHandwritingTab, setActiveHandwritingTab] = useState<'preview' | 'markdown' | 'html'>('preview');
-  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied'>('idle');
+  const [activeFormulaTab, setActiveFormulaTab] = useState<'block' | 'inline' | 'raw' | 'json'>('block');
+  const [activeTableTab, setActiveTableTab] = useState<'preview' | 'markdown' | 'raw'>('preview');
+  const [activeHandwritingTab, setActiveHandwritingTab] = useState<'preview' | 'markdown' | 'raw'>('preview');
+  const [copiedItem, setCopiedItem] = useState<string>('');  // 跟踪最近复制的项，用内容作为标识
   
   // Settings State
   const [showPromptSettings, setShowPromptSettings] = useState(false);
-  const [formulaPrompt, setFormulaPrompt] = useState(() => localStorage.getItem('prompt_formula') || 'Identify ALL mathematical formulas in the image. Output strictly valid JSON: { "formulas": [{"inline": "$...$", "block": "$$...$$", "raw": "latex", "html": "mathml"}] }. If only one formula, return array with single element.');
+  const [formulaPrompt, setFormulaPrompt] = useState(() => localStorage.getItem('prompt_formula') || `Identify ALL mathematical formulas in the image.
+
+CRITICAL OUTPUT FORMAT:
+- You MUST output JSON with exactly this structure: { "formulas": [array of formula objects] }
+- EACH formula object MUST contain exactly 1 field: "raw"
+
+KEY RULES (VERY IMPORTANT):
+- Output ONLY the "raw" field for each formula (Plain LaTeX WITHOUT any delimiters)
+- DO NOT include $, $$, \\[ or \\] delimiters in the output
+- DO NOT create "inline", "block", or "html" fields - the system will add them automatically
+- Provide clean, pure LaTeX code
+
+Example output:
+{
+  "formulas": [
+    {
+      "raw": "E=mc^2"
+    },
+    {
+      "raw": "\\int_{0}^{\\infty} e^{-x^2} dx = \\frac{\\sqrt{\\pi}}{2}"
+    }
+  ]
+}
+
+If no formulas found, return: { "formulas": [] }`);
   const [tablePrompt, setTablePrompt] = useState(() => localStorage.getItem('prompt_table') || 'Analyze image containing table. Output strictly content in Markdown format. Use standard Markdown tables.');
   const [handwritingPrompt, setHandwritingPrompt] = useState(() => localStorage.getItem('prompt_handwriting') || 'Transcribe handwritten text to Markdown. Preserve lists, headings. Do not wrap in JSON.');
   const [tempPrompt, setTempPrompt] = useState('');
@@ -466,31 +495,40 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
       try {
           const parsed = JSON.parse(clean);
           
-          // 处理新格式：{ formulas: [...] }
+          let formulaData: any[] = [];
+          
+          // 处理新格式：{ formulas: [{ raw: "..." }] }
           if (parsed.formulas && Array.isArray(parsed.formulas)) {
-              return {
-                  data: parsed.formulas,
-                  count: parsed.formulas.length
-              };
+              formulaData = parsed.formulas.map((item: any) => {
+                  let raw = item.raw || '';
+                  // 清理可能的分隔符
+                  raw = raw.replace(/^\$\$/, '').replace(/\$\$$/, '');  // 移除 $$
+                  raw = raw.replace(/^\$/, '').replace(/\$$/, '');      // 移除 $
+                  raw = raw.replace(/^\\\[/, '').replace(/\\\]$/, ''); // 移除 \[
+                  raw = raw.replace(/^\\\(/, '').replace(/\\\)$/, ''); // 移除 \(
+                  
+                  return {
+                      inline: `$${raw}$`,
+                      block: `$$${raw}$$`,
+                      raw: raw
+                  };
+              });
           }
-          
           // 处理旧格式（单个公式）向后兼容
-          if (parsed.inline || parsed.block || parsed.raw || parsed.html) {
-              return {
-                  data: [parsed],
-                  count: 1
-              };
+          else if (parsed.inline || parsed.block || parsed.raw || parsed.html) {
+              formulaData = [parsed];
           }
-          
           // 处理数组格式直接返回的情况
-          if (Array.isArray(parsed)) {
-              return {
-                  data: parsed,
-                  count: parsed.length
-              };
+          else if (Array.isArray(parsed)) {
+              formulaData = parsed;
+          } else {
+              throw new Error("Invalid JSON structure in response.");
           }
           
-          throw new Error("Invalid JSON structure in response.");
+          return {
+              data: formulaData,
+              count: formulaData.length
+          };
       } catch (e) {
           console.error('JSON Parse Error:', e);
           throw new Error("无法解析识别结果，请重试或检查图片。");
@@ -750,8 +788,10 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
             image: base64Data,
             mimeType: mimeType,
             prompt: formulaPrompt,
-            jsonSchema: { type: Type.OBJECT, properties: { formulas: {type:Type.ARRAY, items: {type:Type.OBJECT, properties: { inline: {type:Type.STRING}, block: {type:Type.STRING}, raw: {type:Type.STRING}, html: {type:Type.STRING} }}}} }
+            jsonSchema: { type: Type.OBJECT, properties: { formulas: {type:Type.ARRAY, items: {type:Type.OBJECT, properties: { raw: {type:Type.STRING} }}}} }
           });
+          // 保存原始输出用于调试
+          setRawAiOutput(responseText);
           const result = parseFormulaJsonSafe(responseText);
           setFormulaResult(result);
           setActiveFormulaTab('block');
@@ -769,51 +809,119 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
               }
           });
       } else if (mode === 'table') {
-          const responseText = await generateContent({
-              apiKey: config.apiKey,
-              model: config.model,
-              baseUrl: config.baseUrl,
-              image: base64Data,
-              mimeType: mimeType,
-              prompt: tablePrompt
-          });
-          setTableResult({ markdown: responseText, html: responseText });
-          setActiveTableTab('preview');
-          
-          // 保存到统一历史记录
-          addHistoryItem({
-              module: 'ocr',
-              status: 'success',
-              title: `表格识别 - ${responseText.slice(0, 30).replace(/\n/g, '')}...`,
-              preview: responseText.slice(0, 200) + (responseText.length > 200 ? '...' : ''),
-              fullResult: responseText,
-              metadata: {
-                  ocrMode: 'table'
+          // 表格识别使用流式输出
+          setStreamingText('');
+          let tableResponseText = '';
+          try {
+              const stream = generateContentStream({
+                  apiKey: config.apiKey,
+                  model: config.model,
+                  baseUrl: config.baseUrl,
+                  image: base64Data,
+                  mimeType: mimeType,
+                  prompt: tablePrompt
+              });
+              
+              for await (const chunk of stream) {
+                  tableResponseText += chunk;
+                  setStreamingText(tableResponseText);
+                  setRawAiOutput(tableResponseText);
               }
-          });
+              
+              setTableResult({ markdown: tableResponseText, html: tableResponseText });
+              setActiveTableTab('preview');
+              
+              // 保存到统一历史记录
+              addHistoryItem({
+                  module: 'ocr',
+                  status: 'success',
+                  title: `表格识别 - ${tableResponseText.slice(0, 30).replace(/\n/g, '')}...`,
+                  preview: tableResponseText.slice(0, 200) + (tableResponseText.length > 200 ? '...' : ''),
+                  fullResult: tableResponseText,
+                  metadata: {
+                      ocrMode: 'table'
+                  }
+              });
+          } catch (streamError) {
+              console.error('Streaming error, falling back to non-streaming:', streamError);
+              // 降级到非流式
+              const responseText = await generateContent({
+                  apiKey: config.apiKey,
+                  model: config.model,
+                  baseUrl: config.baseUrl,
+                  image: base64Data,
+                  mimeType: mimeType,
+                  prompt: tablePrompt
+              });
+              setTableResult({ markdown: responseText, html: responseText });
+              setActiveTableTab('preview');
+              
+              addHistoryItem({
+                  module: 'ocr',
+                  status: 'success',
+                  title: `表格识别 - ${responseText.slice(0, 30).replace(/\n/g, '')}...`,
+                  preview: responseText.slice(0, 200) + (responseText.length > 200 ? '...' : ''),
+                  fullResult: responseText,
+                  metadata: { ocrMode: 'table' }
+              });
+          }
       } else if (mode === 'handwriting') {
-          const responseText = await generateContent({
-              apiKey: config.apiKey,
-              model: config.model,
-              baseUrl: config.baseUrl,
-              image: base64Data,
-              mimeType: mimeType,
-              prompt: handwritingPrompt
-          });
-          setHandwritingResult({ markdown: responseText, html: responseText });
-          setActiveHandwritingTab('preview');
-          
-          // 保存到统一历史记录
-          addHistoryItem({
-              module: 'ocr',
-              status: 'success',
-              title: `手写体识别 - ${responseText.slice(0, 30).replace(/\n/g, '')}...`,
-              preview: responseText.slice(0, 200) + (responseText.length > 200 ? '...' : ''),
-              fullResult: responseText,
-              metadata: {
-                  ocrMode: 'handwriting'
+          // 手写识别使用流式输出
+          setStreamingText('');
+          let handwritingResponseText = '';
+          try {
+              const stream = generateContentStream({
+                  apiKey: config.apiKey,
+                  model: config.model,
+                  baseUrl: config.baseUrl,
+                  image: base64Data,
+                  mimeType: mimeType,
+                  prompt: handwritingPrompt
+              });
+              
+              for await (const chunk of stream) {
+                  handwritingResponseText += chunk;
+                  setStreamingText(handwritingResponseText);
+                  setRawAiOutput(handwritingResponseText);
               }
-          });
+              
+              setHandwritingResult({ markdown: handwritingResponseText, html: handwritingResponseText });
+              setActiveHandwritingTab('preview');
+              
+              // 保存到统一历史记录
+              addHistoryItem({
+                  module: 'ocr',
+                  status: 'success',
+                  title: `手写体识别 - ${handwritingResponseText.slice(0, 30).replace(/\n/g, '')}...`,
+                  preview: handwritingResponseText.slice(0, 200) + (handwritingResponseText.length > 200 ? '...' : ''),
+                  fullResult: handwritingResponseText,
+                  metadata: {
+                      ocrMode: 'handwriting'
+                  }
+              });
+          } catch (streamError) {
+              console.error('Streaming error, falling back to non-streaming:', streamError);
+              // 降级到非流式
+              const responseText = await generateContent({
+                  apiKey: config.apiKey,
+                  model: config.model,
+                  baseUrl: config.baseUrl,
+                  image: base64Data,
+                  mimeType: mimeType,
+                  prompt: handwritingPrompt
+              });
+              setHandwritingResult({ markdown: responseText, html: responseText });
+              setActiveHandwritingTab('preview');
+              
+              addHistoryItem({
+                  module: 'ocr',
+                  status: 'success',
+                  title: `手写体识别 - ${responseText.slice(0, 30).replace(/\n/g, '')}...`,
+                  preview: responseText.slice(0, 200) + (responseText.length > 200 ? '...' : ''),
+                  fullResult: responseText,
+                  metadata: { ocrMode: 'handwriting' }
+              });
+          }
       }
     } catch (err: any) {
       console.error('OCR Error:', err);
@@ -823,10 +931,12 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
     }
   };
 
-  const handleCopy = (text: string) => {
+  const handleCopy = (text: string, identifier?: string) => {
     navigator.clipboard.writeText(text).then(() => {
-        setCopyStatus('copied');
-        setTimeout(() => setCopyStatus('idle'), 2000);
+        // 如果提供了标识符，记录这个标识符；否则记录文本内容
+        const id = identifier || text;
+        setCopiedItem(id);
+        setTimeout(() => setCopiedItem(''), 2000);
     });
   };
 
@@ -1076,77 +1186,105 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
                     <div className="flex flex-col h-full">
                         {/* Tabs */}
                         <div className="flex bg-slate-100 p-1 rounded-xl w-fit mb-4">
-                            {mode === 'formula' && ['block', 'inline', 'raw', 'html'].map(t => (
-                                <button key={t} onClick={() => setActiveFormulaTab(t as any)} className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize ${activeFormulaTab === t ? 'bg-white shadow-sm' : 'text-slate-500'}`}>{t}</button>
+                            {mode === 'formula' && ['block', 'inline', 'raw', 'json'].map(t => (
+                                <button key={t} onClick={() => setActiveFormulaTab(t as any)} className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize ${activeFormulaTab === t ? 'bg-white shadow-sm' : 'text-slate-500'}`}>{t === 'json' ? '原始JSON' : t}</button>
                             ))}
-                            {mode === 'table' && ['preview', 'markdown'].map(t => (
-                                <button key={t} onClick={() => setActiveTableTab(t as any)} className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize ${activeTableTab === t ? 'bg-white shadow-sm' : 'text-slate-500'}`}>{t}</button>
+                            {mode === 'table' && ['preview', 'markdown', 'raw'].map(t => (
+                                <button key={t} onClick={() => setActiveTableTab(t as any)} className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize ${activeTableTab === t ? 'bg-white shadow-sm' : 'text-slate-500'}`}>{t === 'raw' ? '原始输出' : t}</button>
                             ))}
-                            {mode === 'handwriting' && ['preview', 'markdown'].map(t => (
-                                <button key={t} onClick={() => setActiveHandwritingTab(t as any)} className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize ${activeHandwritingTab === t ? 'bg-white shadow-sm' : 'text-slate-500'}`}>{t}</button>
+                            {mode === 'handwriting' && ['preview', 'markdown', 'raw'].map(t => (
+                                <button key={t} onClick={() => setActiveHandwritingTab(t as any)} className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize ${activeHandwritingTab === t ? 'bg-white shadow-sm' : 'text-slate-500'}`}>{t === 'raw' ? '原始输出' : t}</button>
                             ))}
                         </div>
                         
                         {/* Content Area */}
                         <div className="flex-1 overflow-auto bg-slate-50 rounded-xl border border-slate-200 p-4 custom-scrollbar">
-                            {mode === 'formula' && formulaResult && (
-                                <div className="flex flex-col gap-4">
-                                    {/* 显示公式数量 */}
-                                    <div className="text-center text-xs text-slate-500 bg-slate-100 py-2 rounded-lg">
-                                        共识别到 {formulaResult.count} 个公式
-                                    </div>
-                                    
-                                    {/* 遍历显示所有公式 */}
-                                    {formulaResult.data.map((formulaData, index) => (
-                                        <div key={index} className="flex flex-col gap-3 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-xs font-bold text-[var(--primary-color)]">公式 #{index + 1}</span>
-                                                <button onClick={() => handleCopy(formulaData[activeFormulaTab])} className="text-xs text-slate-400 hover:text-[var(--primary-color)] transition-colors">
-                                                    {copyStatus === 'copied' ? '✓ 已复制' : '复制'}
-                                                </button>
-                                            </div>
-                                            
-                                            {/* 显示原始代码 */}
-                                            <div className="bg-slate-800 text-slate-200 p-3 rounded-lg font-mono text-xs break-all">
-                                                {formulaData[activeFormulaTab]}
-                                            </div>
-                                            
-                                            {/* 显示渲染结果 */}
-                                            {activeFormulaTab !== 'html' && activeFormulaTab !== 'raw' && (
-                                                <div className={` overflow-x-auto p-4 bg-slate-50 rounded-lg ${activeFormulaTab === 'block' ? 'py-6' : ''}`}>
-                                                    <ReactMarkdown
-                                                        remarkPlugins={[remarkMath]}
-                                                        rehypePlugins={[rehypeKatex]}
-                                                        className="w-full"
-                                                    >
-                                                        {formulaData[activeFormulaTab]}
-                                                    </ReactMarkdown>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                    
-                                    {/* 底部批量操作 */}
-                                    {formulaResult.count > 1 && (
-                                        <div className="flex justify-center gap-2 mt-2">
-                                            <button
-                                                onClick={() => {
-                                                    const allFormulas = formulaResult.data.map((f, i) => `公式 ${i + 1}:\n${f[activeFormulaTab]}`).join('\n\n');
-                                                    handleCopy(allFormulas);
-                                                }}
-                                                className="px-4 py-2 bg-[var(--primary-color)] text-white text-xs font-bold rounded-lg hover:bg-[var(--primary-hover)] transition-colors"
-                                            >
-                                                复制全部公式
-                                            </button>
-                                        </div>
-                                    )}
+                            {/* Loading state with streaming for table and handwriting */}
+                            {isAnalyzing && !formulaResult && !tableResult && !handwritingResult && (
+                                <div className="animate-pulse space-y-4">
+                                    <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                                    <div className="h-4 bg-slate-200 rounded w-1/2"></div>
+                                    <div className="h-4 bg-slate-200 rounded w-5/6"></div>
+                                    <div className="text-xs text-slate-400 pt-4 font-mono whitespace-pre-wrap">{streamingText}</div>
                                 </div>
                             )}
+                            
+                            {mode === 'formula' && formulaResult && (
+                                <div className="flex flex-col gap-4">
+                                    {/* 原始JSON输出 */}
+                                    {activeFormulaTab === 'json' && rawAiOutput && (
+                                        <div className="bg-slate-800 text-slate-200 p-4 rounded-xl font-mono text-xs break-all overflow-auto max-h-[500px]">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className="text-xs font-bold text-amber-400">AI 原始 JSON 输出</span>
+                                                <button onClick={() => handleCopy(rawAiOutput, 'raw-json')} className="text-xs text-slate-400 hover:text-amber-400 transition-colors">
+                                                    {copiedItem === 'raw-json' ? '✓ 已复制' : '复制'}
+                                                </button>
+                                            </div>
+                                            <pre className="whitespace-pre-wrap">{rawAiOutput}</pre>
+                                        </div>
+                                    )}
+                                    
+                                    {/* 非JSON标签下显示每个公式的框 */}
+                                    {activeFormulaTab !== 'json' && (
+                                        <>
+                                            {/* 显示公式数量 */}
+                                            <div className="text-center text-xs text-slate-500 bg-slate-100 py-2 rounded-lg">
+                                                共识别到 {formulaResult.count} 个公式
+                                            </div>
+                                            
+                                            {/* 遍历显示所有公式 */}
+                                            {formulaResult.data.map((formulaData, index) => (
+                                                <div key={index} className="flex flex-col gap-3 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-xs font-bold text-[var(--primary-color)]">公式 #{index + 1}</span>
+                                                        <button onClick={() => handleCopy(formulaData[activeFormulaTab], `formula-${index}-${activeFormulaTab}`)} className="text-xs text-slate-400 hover:text-[var(--primary-color)] transition-colors">
+                                                            {copiedItem === `formula-${index}-${activeFormulaTab}` ? '✓ 已复制' : '复制'}
+                                                        </button>
+                                                    </div>
+                                                    
+                                                    {/* 显示原始代码 */}
+                                                    <div className="bg-slate-800 text-slate-200 p-3 rounded-lg font-mono text-xs break-all">
+                                                        {formulaData[activeFormulaTab]}
+                                                    </div>
+                                                    
+                                                    {/* 显示渲染结果 */}
+                                                    {activeFormulaTab !== 'raw' && (
+                                                        <div className={` overflow-x-auto p-4 bg-slate-50 rounded-lg ${activeFormulaTab === 'block' ? 'py-6' : ''}`}>
+                                                            <ReactMarkdown
+                                                                remarkPlugins={[remarkMath]}
+                                                                rehypePlugins={[rehypeKatex]}
+                                                                className="w-full"
+                                                            >
+                                                                {formulaData[activeFormulaTab]}
+                                                            </ReactMarkdown>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                    </>
+                                )}
+                                
+                                {/* 底部批量操作 */}
+                                {activeFormulaTab !== 'json' && formulaResult.count > 1 && (
+                                    <div className="flex justify-center gap-2 mt-2">
+                                        <button
+                                            onClick={() => {
+                                                const allFormulas = formulaResult.data.map((f, i) => `公式 ${i + 1}:\n${f[activeFormulaTab]}`).join('\n\n');
+                                                handleCopy(allFormulas, 'all-formulas');
+                                            }}
+                                            className="px-4 py-2 bg-[var(--primary-color)] text-white text-xs font-bold rounded-lg hover:bg-[var(--primary-hover)] transition-colors"
+                                        >
+                                            复制全部公式
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                             {mode === 'table' && tableResult && (
-                                activeTableTab === 'preview' ? <div className="prose prose-sm max-w-none"><ReactMarkdown remarkPlugins={[remarkGfm]}>{tableResult.markdown}</ReactMarkdown></div> : <pre className="text-xs font-mono">{tableResult.markdown}</pre>
+                                activeTableTab === 'preview' ? <div className="prose prose-sm max-w-none"><ReactMarkdown remarkPlugins={[remarkGfm]}>{tableResult.markdown}</ReactMarkdown></div> : activeTableTab === 'raw' ? <pre className="text-xs font-mono bg-slate-800 text-slate-200 p-3 rounded-lg overflow-auto max-h-full">{rawAiOutput}</pre> : <pre className="text-xs font-mono">{tableResult.markdown}</pre>
                             )}
                             {mode === 'handwriting' && handwritingResult && (
-                                activeHandwritingTab === 'preview' ? <div className="prose prose-sm max-w-none"><ReactMarkdown remarkPlugins={[remarkGfm]}>{handwritingResult.markdown}</ReactMarkdown></div> : <pre className="text-xs font-mono">{handwritingResult.markdown}</pre>
+                                activeHandwritingTab === 'preview' ? <div className="prose prose-sm max-w-none"><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]}>{handwritingResult.markdown}</ReactMarkdown></div> : activeHandwritingTab === 'raw' ? <pre className="text-xs font-mono bg-slate-800 text-slate-200 p-3 rounded-lg overflow-auto max-h-full">{rawAiOutput}</pre> : <pre className="text-xs font-mono">{handwritingResult.markdown}</pre>
                             )}
                         </div>
                     </div>
@@ -1171,9 +1309,9 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
                         if (mode === 'pdf' && pdfResult) txt = pdfResult.markdown;
                         handleCopy(txt);
                     }}
-                    className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all ${copyStatus === 'copied' ? 'bg-green-50 text-green-600 border-green-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                    className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all ${copiedItem === `copy-content-${mode}` ? 'bg-green-50 text-green-600 border-green-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
                 >
-                    {copyStatus === 'copied' ? '已复制' : '复制内容'}
+                    {copiedItem === `copy-content-${mode}` ? '已复制' : '复制内容'}
                 </button>
                 <button 
                     onClick={insertContent} 

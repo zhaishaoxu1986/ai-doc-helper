@@ -490,6 +490,10 @@ Please respond with ONLY complete prompt text, nothing else.`;
       const effectivePattern = renamePattern || 'YYYY-MM-DD_作者_文件主题.ext';
       const prompt = `${renamePrompt}\n\nIMPORTANT: Use this Target Naming Pattern: "${effectivePattern}"\n\nFiles to process:\n${JSON.stringify(inputs, null, 2)}`;
       
+      // 🐛 调试：打印完整的 Prompt
+      console.log('=== 智能重命名 Prompt ===');
+      console.log(prompt);
+      
       const response = await generateContent({
         apiKey: config.apiKey,
         model: config.model,
@@ -497,29 +501,112 @@ Please respond with ONLY complete prompt text, nothing else.`;
         prompt: prompt,
         jsonSchema: { type: Type.ARRAY }
       });
-
+      
+      // 🐛 调试：打印 AI 原始响应（前500字符）
+      const truncatedRawResponse = response.substring(0, 500);
+      console.log('=== AI 原始响应（前500字符） ===');
+      console.log(truncatedRawResponse);
+      
       let jsonStr = response.trim().replace(/```json|```/g, '');
-      const mapping = JSON.parse(jsonStr);
-
-      if (Array.isArray(mapping)) {
-        setFiles(prev => prev.map(f => {
-          const match = mapping.find((m: any) => m.originalName === f.file.name);
-          return match ? { ...f, newName: match.newName, reason: match.reason, status: 'done' } : f;
-        }));
+      
+      // 🐛 调试：打印 AI 响应的完整长度
+      console.log('=== AI 响应完整长度 ===');
+      console.log(response.length);
+      
+      // 🐛 调试：打印清理后的 JSON 字符串
+      console.log('=== 清理后的 JSON 字符串（移除 ```json 标记） ===');
+      console.log(jsonStr);
+      
+      let mapping;
+      
+      // 健壮的JSON解析
+      try {
+        mapping = JSON.parse(jsonStr);
         
-        // 保存到统一历史记录
-        addHistoryItem({
-          module: 'multidoc',
-          status: 'success',
-          title: `智能重命名 - ${files.length} 个文件`,
-          preview: mapping.slice(0, 3).map((m: any) => `${m.originalName} → ${m.newName}`).join('\n') + (mapping.length > 3 ? '\n...' : ''),
-          fullResult: JSON.stringify(mapping),
-          metadata: {
-            docMode: 'rename',
-            fileCount: files.length
-          }
-        });
+        // 🐛 调试：打印解析成功
+        console.log('=== JSON 解析成功 ===');
+        console.log('解析对象类型:', typeof mapping, '是否为数组:', Array.isArray(mapping));
+        console.log('解析结果详情:', JSON.stringify(mapping, null, 2));
+        
+      } catch (parseError) {
+        // 🐛 调试：打印解析失败
+        console.log('=== JSON 解析失败 ===');
+        console.log('错误信息:', parseError.message);
+        console.log('尝试的 JSON 字符串:', jsonStr);
+        throw new Error(`AI返回格式错误: ${parseError.message}`);
       }
+
+      // 验证返回数据格式
+      console.log('=== 开始验证返回数据格式 ===');
+      
+      // AI 可能返回 { files: [...] } 或直接返回 [...]
+      if (!Array.isArray(mapping) && mapping.files && Array.isArray(mapping.files)) {
+        console.log('检测到包含 files 字段的对象，提取 files 数组');
+        mapping = mapping.files;
+      }
+      
+      if (!Array.isArray(mapping)) {
+        console.error('❌ 错误：AI返回的不是数组');
+        throw new Error(`AI返回格式错误: 期望数组格式，实际收到 ${typeof mapping}`);
+      }
+      
+      console.log('✓ 数组验证通过，数组长度:', mapping.length);
+      
+      console.log('✓ 数组验证通过，数组长度:', mapping.length);
+      
+      // 验证数组内容
+      const validMapping = mapping.filter((m: any) => {
+        const hasName = m.originalName && typeof m.originalName === 'string';
+        const hasNewName = m.newName && typeof m.newName === 'string';
+        const hasReason = m.reason && typeof m.reason === 'string';
+        const isValid = hasName && hasNewName && hasReason;
+        
+        // 🐛 调试：打印每个元素的验证结果
+        console.log(`元素 ${validMapping.length}:`, JSON.stringify(m, null, 2));
+        
+        return isValid;
+      });
+      
+      console.log('✓ 有效的重命名结果数量:', validMapping.length);
+
+      if (validMapping.length === 0) {
+        throw new Error('AI返回的数据中没有任何有效的重命名结果');
+      }
+
+      console.log('AI返回的有效重命名结果:', validMapping);
+
+      setFiles(prev => prev.map(f => {
+        const match = validMapping.find((m: any) => m && m.originalName === f.file.name);
+        
+        // 🐛 调试：打印每个文件的匹配结果
+        console.log(`正在处理文件: ${f.file.name}`);
+        console.log('AI原始名称:', f.file.name);
+        if (match) {
+          console.log(`✅ 找到匹配，新名称: ${match.newName}`);
+          console.log('  理由:', match.reason);
+        } else {
+          console.warn('⚠️ 文件未找到匹配');
+        }
+        
+        return match ? { ...f, newName: match.newName, reason: match.reason, status: 'done' } : f;
+      }));
+      
+      const renamedCount = validMapping.length;
+      
+      // 保存到统一历史记录
+      addHistoryItem({
+        module: 'multidoc',
+        status: 'success',
+        title: `智能重命名 - ${files.length} 个文件 (成功 ${renamedCount} 个)`,
+        preview: validMapping.slice(0, 3).map((m: any) => `${m.originalName} → ${m.newName}`).join('\n') + (validMapping.length > 3 ? '\n...' : ''),
+        fullResult: JSON.stringify(validMapping),
+        metadata: {
+          docMode: 'rename',
+          fileCount: files.length,
+          renamedCount: renamedCount,
+          failedCount: files.length - renamedCount
+        }
+      });
     } catch (e) {
       console.error(e);
       alert("AI 处理失败，请检查 Prompt 或重试");

@@ -525,7 +525,8 @@ Please respond with ONLY the complete prompt text, nothing else.`;
       </div>
       <textarea
         ref={textareaRef}
-        className={`flex-1 w-full p-8 resize-none focus:outline-none markdown-editor text-sm leading-relaxed text-slate-800 bg-white selection:bg-[var(--primary-50)] ${isLocked ? 'cursor-wait opacity-80' : ''}`}
+        style={{ caretColor: '#1f2937' }}
+        className={`flex-1 w-full p-8 resize-none focus:outline-none markdown-editor text-sm leading-relaxed text-slate-800 bg-[#f3f4f6] selection:bg-[var(--primary-50)] ${isLocked ? 'cursor-not-allowed opacity-80' : 'cursor-text'}`}
         placeholder="在这里输入 Markdown 内容，或点击上方导入 Word... (支持 Ctrl+Z 撤销，支持直接粘贴截图)"
         value={value}
         onChange={handleTextareaChange}

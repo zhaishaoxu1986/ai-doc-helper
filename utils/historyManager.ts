@@ -26,6 +26,10 @@ export interface UnifiedHistoryItem {
     logCount?: number;
     sourceCount?: number;
     
+    // 智能重命名统计字段
+    renamedCount?: number; // 成功重命名的文件数量
+    failedCount?: number; // 未能重命名的文件数量
+    
     // 通用字段
     duration?: number; // 处理耗时（秒）
     errorMessage?: string;
