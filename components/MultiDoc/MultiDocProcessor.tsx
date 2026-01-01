@@ -555,14 +555,18 @@ Please respond with ONLY complete prompt text, nothing else.`;
       console.log('✓ 数组验证通过，数组长度:', mapping.length);
       
       // 验证数组内容
+      let validCount = 0;
       const validMapping = mapping.filter((m: any) => {
         const hasName = m.originalName && typeof m.originalName === 'string';
         const hasNewName = m.newName && typeof m.newName === 'string';
         const hasReason = m.reason && typeof m.reason === 'string';
         const isValid = hasName && hasNewName && hasReason;
         
-        // 🐛 调试：打印每个元素的验证结果
-        console.log(`元素 ${validMapping.length}:`, JSON.stringify(m, null, 2));
+        if (isValid) {
+          // 🐛 调试：打印每个元素的验证结果
+          console.log(`元素 ${validCount + 1}:`, JSON.stringify(m, null, 2));
+          validCount++;
+        }
         
         return isValid;
       });
