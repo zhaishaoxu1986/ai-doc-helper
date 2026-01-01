@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppView } from '../../types';
 import UserCenter from './UserCenter';
 import AboutModal from './AboutModal';
@@ -16,8 +16,26 @@ const Header: React.FC<HeaderProps> = ({ currentView, setView }) => {
   const [showAbout, setShowAbout] = useState(false);
   const [logoError, setLogoError] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-
+  const [refreshKey, setRefreshKey] = useState(0);
+  
+  // 初始化配置
   const activeConfig = getModelConfig(currentView === AppView.AI_VISION ? 'ocr' : 'text');
+  
+  // 监听 user-settings-change 事件，当设置变化时重新渲染
+  useEffect(() => {
+    const handleSettingsChange = () => {
+      setRefreshKey(prev => prev + 1);
+    };
+    
+    window.addEventListener('user-settings-change', handleSettingsChange);
+    
+    return () => {
+      window.removeEventListener('user-settings-change', handleSettingsChange);
+    };
+  }, []);
+  
+  // 当 refreshKey 变化时，无需重新计算 activeConfig
+  // 因为 getModelConfig 是纯函数，每次重新渲染时会自动调用
 
   const handleHistoryItemClick = (item: UnifiedHistoryItem) => {
     setShowHistory(false);

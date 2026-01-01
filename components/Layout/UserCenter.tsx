@@ -24,6 +24,10 @@ const UserCenter: React.FC = () => {
   const [activeTheme, setActiveTheme] = useState('blue');
 
   const [isSaved, setIsSaved] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // 当 refreshKey 变化时，重新获取配置
+  const [textConfigState, setTextConfigState] = useState(() => getModelConfig('text'));
 
   useEffect(() => {
     if (showSettings) {
@@ -64,6 +68,11 @@ const UserCenter: React.FC = () => {
     }
   }, [showSettings]);
 
+  // 监听 refreshKey 变化，更新当前引擎显示
+  useEffect(() => {
+    setTextConfigState(getModelConfig('text'));
+  }, [refreshKey]);
+
   const handleSave = () => {
     const finalTextModel = useCustomTextModel ? customTextModelName.trim() : textModel;
     const finalOcrModel = separateOcr ? ocrModel : ''; 
@@ -77,6 +86,12 @@ const UserCenter: React.FC = () => {
     saveTheme(activeTheme);
     saveSerperKey(serperKey); // Save Serper Key
 
+    // 触发重新渲染以更新【当前引擎】显示
+    setRefreshKey(prev => prev + 1);
+    
+    // Dispatch custom event to notify other components (like Header) to update
+    window.dispatchEvent(new Event('user-settings-change'));
+    
     // Dispatch custom event to notify App.tsx to reload theme immediately
     window.dispatchEvent(new Event('theme-change'));
 
@@ -84,7 +99,7 @@ const UserCenter: React.FC = () => {
     setTimeout(() => setIsSaved(false), 2000);
   };
 
-  const textConfig = getModelConfig('text');
+  const textConfig = textConfigState;
   const hasKey = !!textConfig.apiKey;
   
   return (
