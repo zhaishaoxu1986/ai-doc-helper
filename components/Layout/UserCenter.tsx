@@ -16,10 +16,6 @@ const UserCenter: React.FC = () => {
   const [useCustomTextModel, setUseCustomTextModel] = useState(false);
   const [customTextModelName, setCustomTextModelName] = useState('');
 
-  // OCR Model State
-  const [ocrModel, setOcrModel] = useState(''); 
-  const [separateOcr, setSeparateOcr] = useState(false);
-
   // Theme State
   const [activeTheme, setActiveTheme] = useState('blue');
 
@@ -53,16 +49,6 @@ const UserCenter: React.FC = () => {
         setUseCustomTextModel(false);
       }
 
-      // Initialize OCR Model
-      const storedOcr = settings.ocrModel;
-      if (storedOcr && storedOcr !== storedModel) {
-        setSeparateOcr(true);
-        setOcrModel(storedOcr);
-      } else {
-        setSeparateOcr(false);
-        setOcrModel(AVAILABLE_MODELS[0].id);
-      }
-
       // Initialize Theme
       setActiveTheme(settings.theme);
     }
@@ -75,14 +61,13 @@ const UserCenter: React.FC = () => {
 
   const handleSave = () => {
     const finalTextModel = useCustomTextModel ? customTextModelName.trim() : textModel;
-    const finalOcrModel = separateOcr ? ocrModel : ''; 
     
     if (useCustomTextModel && !finalTextModel) {
         alert("请输入自定义模型名称");
         return;
     }
 
-    saveUserSettings(apiKey, finalTextModel, finalOcrModel, useCustomTextModel ? baseUrl.trim() : baseUrl.trim());
+    saveUserSettings(apiKey, finalTextModel, '', baseUrl.trim());
     saveTheme(activeTheme);
     saveSerperKey(serperKey); // Save Serper Key
 
@@ -252,73 +237,40 @@ const UserCenter: React.FC = () => {
                                 )}
                             </div>
                         </div>
-                    </div>
 
-                    {/* 2. OCR 模型配置 */}
-                    <div>
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-sm font-bold text-slate-800 flex items-center">
-                                <span className="bg-slate-100 text-slate-500 w-5 h-5 rounded flex items-center justify-center text-xs mr-2">3</span>
-                                独立 OCR 模型 (Vision)
-                            </h3>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" className="sr-only peer" checked={separateOcr} onChange={(e) => setSeparateOcr(e.target.checked)} />
-                                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--primary-color)]"></div>
-                            </label>
-                        </div>
-                        
-                        {separateOcr && (
-                            <div className="animate-in fade-in slide-in-from-top-2 duration-200 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                <p className="text-xs text-slate-500 mb-2">部分模型（如纯文本模型）不支持图片识别。您可以在此指定一个专门用于 OCR 的视觉模型。</p>
-                                <select 
-                                    value={ocrModel}
-                                    onChange={(e) => setOcrModel(e.target.value)}
-                                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[var(--primary-color)] outline-none bg-white"
-                                >
-                                    {AVAILABLE_MODELS.map(m => (
-                                        <option key={m.id} value={m.id}>{m.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* 3. API Key & URL Overrides */}
-                    <div>
-                        <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center">
-                            <span className="bg-slate-200 text-slate-600 w-5 h-5 rounded flex items-center justify-center text-xs mr-2">4</span>
-                            参数覆盖 (Global Overrides)
-                        </h3>
-                        <div className="space-y-3">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">API Key</label>
-                                <input 
-                                    type="password" 
-                                    value={apiKey}
-                                    onChange={(e) => setApiKey(e.target.value)}
-                                    placeholder={(!apiKey && !useCustomTextModel) ? "使用预设模型的默认 Key" : "覆盖默认 Key (sk-...)"}
-                                    className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-mono placeholder:text-slate-400 focus:border-[var(--primary-color)] outline-none text-slate-900"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Base URL</label>
-                                <input 
-                                    type="text" 
-                                    value={baseUrl}
-                                    onChange={(e) => setBaseUrl(e.target.value)}
-                                    placeholder={(!baseUrl && !useCustomTextModel) ? "使用预设模型的默认 URL" : "覆盖默认 URL"}
-                                    className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-mono placeholder:text-slate-400 focus:border-[var(--primary-color)] outline-none text-slate-900"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Serper API Key</label>
-                                <input 
-                                    type="password" 
-                                    value={serperKey}
-                                    onChange={(e) => setSerperKey(e.target.value)}
-                                    placeholder="使用默认 Key"
-                                    className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-mono placeholder:text-slate-400 focus:border-[var(--primary-color)] outline-none text-slate-900"
-                                />
+                        {/* API Key & URL Overrides - 合并到主模型配置 */}
+                        <div className="mt-4 pt-4 border-t border-slate-100">
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">API Key</label>
+                                    <input 
+                                        type="password" 
+                                        value={apiKey}
+                                        onChange={(e) => setApiKey(e.target.value)}
+                                        placeholder={(!apiKey && !useCustomTextModel) ? "使用预设模型的默认 Key" : "覆盖默认 Key (sk-...)"}
+                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-mono placeholder:text-slate-400 focus:border-[var(--primary-color)] outline-none text-slate-900"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Base URL</label>
+                                    <input 
+                                        type="text" 
+                                        value={baseUrl}
+                                        onChange={(e) => setBaseUrl(e.target.value)}
+                                        placeholder={(!baseUrl && !useCustomTextModel) ? "使用预设模型的默认 URL" : "覆盖默认 URL"}
+                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-mono placeholder:text-slate-400 focus:border-[var(--primary-color)] outline-none text-slate-900"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Serper API Key</label>
+                                    <input 
+                                        type="password" 
+                                        value={serperKey}
+                                        onChange={(e) => setSerperKey(e.target.value)}
+                                        placeholder="使用默认 Key"
+                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-mono placeholder:text-slate-400 focus:border-[var(--primary-color)] outline-none text-slate-900"
+                                    />
+                                </div>
                             </div>
                         </div>
                     </div>
