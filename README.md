@@ -27,10 +27,9 @@
    <a href="#-简介">简介</a> ·
    <a href="#-核心功能">核心功能</a> ·
    <a href="#-快速开始">快速开始</a> ·
-   <a href="#-使用指南">使用指南</a> ·
    <a href="#-技术栈">技术栈</a> ·
    <a href="#-项目结构">项目结构</a>
- </p> 
+</p>
 
 ---
 
@@ -44,72 +43,72 @@
 
 ## ✨ 核心功能
 
-### 📝 沉浸式编辑器
+### 1.📝 沉浸式编辑器
 双栏设计，左侧 Markdown 编辑，右侧实时预览 Word A4 纸张排版效果。支持一键"学术化润色"和"LaTeX 公式修正"与"自定义功能"等等。
 
-#### AI助手修正格式
+#### 1.1 AI助手修正格式
 从deepseek复制内容，并用AI助手修正生成正确的markdown格式的公式与表格。
-![编辑器 AI 助手演示](public/gif/editor_ai.gif)
+<img src="public/gif/editor_ai.gif" alt="编辑器 AI 助手演示" width="600" />
 
-#### 自定义AI助手功能
+#### 1.2 自定义AI助手功能
 填写功能名称，大模型自动生成prompt并应用，支持全文修正，也支持节选片段修正。
 动图例子为【补充得更详细】
-![ 自定义 AI 助手](public/gif/editor_aidiy.gif)
+<img src="public/gif/editor_aidiy.gif" alt="自定义 AI 助手" width="600" />
 
 
 ---
 
-### 🤖 AI 视觉识别中心
+### 2.🤖 AI 视觉识别中心
 支持截图识别数学公式、复杂表格、手写笔记、PDF 智能转换。自动转换为 LaTeX 或 Markdown 格式，一键插入文档。
 
-####  公式识别
+####  2.1 公式识别
 识别数学公式并转换为 LaTeX 格式
-![公式识别演示](public/gif/ocr_latexgif.gif)
+<img src="public/gif/ocr_latexgif.gif" alt="公式识别演示" width="600" />
 
-####  表格识别
+####  2.2 表格识别
 将截图中的表格转换为 Markdown 格式
-![表格识别演示](public/gif/ocr_tablegif.gif)
+<img src="public/gif/ocr_tablegif.gif" alt="表格识别演示" width="600" />
 
-####  手写体识别
+####  2.3 手写体识别
 识别手写内容并转换为 Markdown
-![手写识别演示](public/gif/ocr_writegif.gif)
+<img src="public/gif/ocr_writegif.gif" alt="手写识别演示" width="600" />
 
-####  PDF 智能转换
+####  2.4 PDF 智能转换
 处理 PDF 页面，智能提取文本和图片
-![PDF 转换演示](public/gif/ocr_pdf.gif)
+<img src="public/gif/ocr_pdf.gif" alt="PDF 转换演示" width="600" />
 
 
 
 ---
 
-### 📚 多文档智能处理
+### 3.📚 多文档智能处理
 批量文件重命名与周报自动聚合。AI 自动分析文件内容，提取关键信息（如作者、日期、作业批次）并生成规范文件名。
 
-#### Deep Research
+#### 3.1 Deep Research
 上传多格式文件进行深度研究并生成报告，包含论文，代码，理论和自定义功能的研究。
 大模型自动生成prompt并应用，动图例子为【财报研究】。
-![Deepresearch命名演示](public/gif/multidoc_dp.gif)
+<img src="public/gif/multidoc_dp.gif" alt="Deepresearch命名演示" width="600" />
 
 
-#### 周报整合
+#### 3.2 周报整合
 批量报告文件处理，自动聚合生成统一报告，再也不需要手动整理周报。
 
-![Multi-Doc Interface](public/gif/multidoc_week.gif)
+<img src="public/gif/multidoc_week.gif" alt="周报整合" width="600" />
 
-#### 查缺补漏
+#### 3.3 查缺补漏
 输入应交名单，导入文件，自动生成核对结果（包含实交，未交和异常文件），检查班里谁没有交作业！
 
-![Multi-Doc Interface](public/gif/multidoc_check.gif)
+<img src="public/gif/multidoc_check.gif" alt="查缺补漏" width="600" />
 
-#### 智能重命名
+#### 3.4 智能重命名
 上交的作业不规范？一键重命名，自动提取文件名中的关键信息，如作者、日期、作业批次等，并生成规范的文件名。
 
-![Multi-Doc Interface](public/gif/multidoc_rename.png)
+<img src="public/gif/multidoc_rename.png" alt="智能重命名" width="600" />
 
 
 ---
 
-### 🔍 AI 深度调研
+### 4.🔍 AI 深度调研
 自动化研究报告生成系统，支持网络搜索、网页访问、信息聚合和报告生成。可自定义 AI 智能体 Prompt，满足个性化研究需求。
 
 `![AI 调研演示](docs/gifs/research_workflow.gif)`
@@ -119,7 +118,7 @@
 
 ---
 
-### 📜 用户中心
+### 5.📜 用户中心
 可配置主题颜色、管理API
 
 
