@@ -45,33 +45,39 @@
 ## ✨ 核心功能
 
 ### 📝 沉浸式编辑器
-双栏设计，左侧 Markdown 编辑，右侧实时预览 Word A4 纸张排版效果。支持一键"学术化润色"和"LaTeX 公式修正"。
+双栏设计，左侧 Markdown 编辑，右侧实时预览 Word A4 纸张排版效果。支持一键"学术化润色"和"LaTeX 公式修正"与"自定义功能"等等。
 
-`![编辑器 AI 助手演示](docs/gifs/editor_ai_assistant.gif)`
+#### AI助手修正格式
+从deepseek复制内容，并用AI助手修正生成正确的markdown格式的公式与表格。
+![编辑器 AI 助手演示](public/gif/editor_ai.gif)
 
-![Editor Interface](docs/images/preview_editor.png)
-*(如果未显示图片，请截取编辑器界面并保存为 `docs/images/preview_editor.png`)*
+#### 自定义AI助手功能
+填写功能名称，大模型自动生成prompt并应用，支持全文修正，也支持节选片段修正。
+动图例子为【补充得更详细】
+![ 自定义 AI 助手](public/gif/editor_aidiy.gif)
+
 
 ---
 
 ### 🤖 AI 视觉识别中心
 支持截图识别数学公式、复杂表格、手写笔记、PDF 智能转换。自动转换为 LaTeX 或 Markdown 格式，一键插入文档。
 
-#### 📐 公式识别
-![公式识别演示](public/gif/latexgif.gif)
+####  公式识别
 识别数学公式并转换为 LaTeX 格式
+![公式识别演示](public/gif/ocr_latexgif.gif)
 
-#### 📋 表格识别
-`![表格识别演示](public/gif/ocr_table.gif)`
+####  表格识别
 将截图中的表格转换为 Markdown 格式
+![表格识别演示](public/gif/ocr_tablegif.gif)
 
-#### ✍️ 手写体识别
-`![手写识别演示](public/gif/ocr_handwriting.gif)`
+####  手写体识别
 识别手写内容并转换为 Markdown
+![手写识别演示](public/gif/ocr_writegif.gif)
 
-#### 📄 PDF 智能转换
-`![PDF 转换演示](public/gif/ocr_pdf.gif)`
-批量处理 PDF 页面，智能提取文本和图片
+####  PDF 智能转换
+处理 PDF 页面，智能提取文本和图片
+![PDF 转换演示](public/gif/ocr_pdf.gif)
+
 
 
 ---
@@ -79,15 +85,27 @@
 ### 📚 多文档智能处理
 批量文件重命名与周报自动聚合。AI 自动分析文件内容，提取关键信息（如作者、日期、作业批次）并生成规范文件名。
 
+#### Deep Research
+上传多格式文件进行深度研究并生成报告，包含论文，代码，理论和自定义功能的研究。
+大模型自动生成prompt并应用，动图例子为【财报研究】。
+![Deepresearch命名演示](public/gif/multidoc_dp.gif)
+
+
+#### 周报整合
+批量报告文件处理，自动聚合生成统一报告，再也不需要手动整理周报。
+
+![Multi-Doc Interface](public/gif/multidoc_week.gif)
+
+#### 查缺补漏
+输入应交名单，导入文件，自动生成核对结果（包含实交，未交和异常文件），检查班里谁没有交作业！
+
+![Multi-Doc Interface](public/gif/multidoc_check.gif)
+
 #### 智能重命名
-`![智能重命名演示](docs/gifs/multidoc_rename.gif)`
-批量上传文件，AI 自动提取关键信息智能重命名
+上交的作业不规范？一键重命名，自动提取文件名中的关键信息，如作者、日期、作业批次等，并生成规范的文件名。
 
-#### 报告聚合
-批量文件处理，自动聚合生成统一报告`
+![Multi-Doc Interface](public/gif/multidoc_rename.png)
 
-![Multi-Doc Interface](docs/images/preview_multidoc.png)
-*(如果未显示图片，请截取多文档界面并保存为 `docs/images/preview_multidoc.png`)*
 
 ---
 
@@ -101,17 +119,22 @@
 
 ---
 
-### 📜 统一历史记录
+### 📜 用户中心
+可配置主题颜色、管理API
+
+
 追踪所有模块的操作历史，支持查看详情、重新使用和批量管理。
 
-`![历史记录演示](docs/gifs/history_management.gif)`
+所有内容保存在浏览器本地，保证数据安全
+
+s
 
 ![History Panel Interface](docs/images/preview_history.png)
 *(如果未显示图片，请截取历史记录界面并保存为 `docs/images/preview_history.png`)*
 
 ---
 
-## 🚀 快速开始
+## 🚀 快速开始（您也可以访问https://ai-doc.xyz/直接体验）
 
 ### 环境准备
 
