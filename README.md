@@ -87,6 +87,7 @@
 #### 3.1 Deep Research
 上传多格式文件进行深度研究并生成报告，包含论文，代码，理论和自定义功能的研究。
 大模型自动生成prompt并应用，动图例子为【财报研究】。
+
 <img src="public/gif/multidoc_dp.gif" alt="Deepresearch命名演示" width="600" />
 
 
@@ -122,8 +123,8 @@
 
 追踪所有模块的操作历史，所有内容保存在浏览器本地，保证数据安全
 
-<img src="public/user/history.png" alt="历史" width="200" />
-<img src="public/user/user.png" alt="用户中心" width="270" />
+
+<img src="public/user/user.png" alt="用户中心" width="200" />
 
 ---
 
