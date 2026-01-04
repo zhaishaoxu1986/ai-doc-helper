@@ -58,27 +58,21 @@
 支持截图识别数学公式、复杂表格、手写笔记、PDF 智能转换和图片去水印。自动转换为 LaTeX 或 Markdown 格式，一键插入文档。
 
 #### 📐 公式识别
-`![公式识别演示](docs/gifs/ocr_formula.gif)`
+`![公式识别演示](public/gif/latexgif.gif)`
 识别数学公式并转换为 LaTeX 格式
 
 #### 📋 表格识别
-`![表格识别演示](docs/gifs/ocr_table.gif)`
+`![表格识别演示](public/gif/ocr_table.gif)`
 将截图中的表格转换为 Markdown 格式
 
 #### ✍️ 手写体识别
-`![手写识别演示](docs/gifs/ocr_handwriting.gif)`
+`![手写识别演示](public/gif/ocr_handwriting.gif)`
 识别手写内容并转换为 Markdown
 
 #### 📄 PDF 智能转换
-`![PDF 转换演示](docs/gifs/ocr_pdf.gif)`
+`![PDF 转换演示](public/gif/ocr_pdf.gif)`
 批量处理 PDF 页面，智能提取文本和图片
 
-#### 💧 去除水印
-`![去水印演示](docs/gifs/ocr_watermark.gif)`
-使用 AI 理解能力去除图片中的水印
-
-![OCR Interface](docs/images/preview_ocr.png)
-*(如果未显示图片，请截取 OCR 界面并保存为 `docs/images/preview_ocr.png`)*
 
 ---
 
