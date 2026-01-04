@@ -58,7 +58,7 @@
 支持截图识别数学公式、复杂表格、手写笔记、PDF 智能转换和图片去水印。自动转换为 LaTeX 或 Markdown 格式，一键插入文档。
 
 #### 📐 公式识别
-`![公式识别演示](public/gif/latexgif.gif)`
+![公式识别演示](public/gif/latexgif.gif)`
 识别数学公式并转换为 LaTeX 格式
 
 #### 📋 表格识别
