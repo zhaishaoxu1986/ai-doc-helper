@@ -344,7 +344,7 @@ If no formulas found, return: { "formulas": [] }`);
           } else if (mode === 'table') {
               filePath = '/ocr/table.jpg';
           } else if (mode === 'handwriting') {
-              filePath = '/ocr/handwrite.jpg';
+              filePath = '/ocr/handwrite.png';
           }
           
           if (filePath) {
