@@ -8,6 +8,7 @@ interface MarkdownEditorProps {
   value: string;
   onChange: (val: string) => void;
   onProcessing?: (isProcessing: boolean) => void;
+  onResetToDefault?: () => void;
 }
 
 interface Tool {
@@ -35,7 +36,7 @@ const DEFAULT_TOOLS: Tool[] = [
   }
 ];
 
-const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ value, onChange, onProcessing }) => {
+const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ value, onChange, onProcessing, onResetToDefault }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showAiTools, setShowAiTools] = useState(false);
@@ -503,7 +504,7 @@ Please respond with ONLY the complete prompt text, nothing else.`;
           </div>
         </div>
         
-        <div className="flex items-center">
+        <div className="flex items-center space-x-2">
             <button
             onClick={() => fileInputRef.current?.click()}
             disabled={isLocked}
@@ -514,13 +515,26 @@ Please respond with ONLY the complete prompt text, nothing else.`;
             </svg>
             导入 WORD
             </button>
-            <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleImportWord} 
-            className="hidden" 
-            accept=".docx" 
+            <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleImportWord}
+            className="hidden"
+            accept=".docx"
             />
+            {onResetToDefault && (
+                <button
+                onClick={onResetToDefault}
+                disabled={isLocked}
+                className="flex items-center px-3 py-1.5 rounded bg-slate-50 text-slate-600 text-[11px] font-bold border border-slate-200 hover:bg-slate-100 hover:text-slate-800 transition-all disabled:opacity-50"
+                title="恢复到默认内容"
+                >
+                <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                回归默认
+                </button>
+            )}
         </div>
       </div>
       <textarea

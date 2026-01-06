@@ -9,10 +9,7 @@ import AIResearch from './components/Research/AIResearch';
 import { AppView, DocumentState, ResearchState } from './types';
 import { getTheme } from './utils/settings';
 
-const App: React.FC = () => {
-  const [view, setView] = useState<AppView>(AppView.EDITOR);
-  const [docState, setDocState] = useState<DocumentState>({
-    markdown: `# AI 智能文档助理使用手册
+const DEFAULT_MARKDOWN = `# AI 智能文档助理使用手册
 
 这是一个专业的文档处理平台，支持将 **Markdown** 无缝转换为 **Word** 格式。
 
@@ -62,9 +59,17 @@ class DocHelper:
 
 
 
-> 提示：您可以随意更换上面的图片链接。点击“AI 助手”体验一键润色，支持 Ctrl+Z 撤销。`,
-    isProcessing: false,
-    progress: 0
+> 提示：您可以随意更换上面的图片链接。点击"AI 助手"体验一键润色，支持 Ctrl+Z 撤销。`;
+
+const App: React.FC = () => {
+  const [view, setView] = useState<AppView>(AppView.EDITOR);
+  const [docState, setDocState] = useState<DocumentState>(() => {
+    const savedMarkdown = localStorage.getItem('markeditor_content');
+    return {
+      markdown: savedMarkdown || DEFAULT_MARKDOWN,
+      isProcessing: false,
+      progress: 0
+    };
   });
 
   const [researchState, setResearchState] = useState<ResearchState>({
@@ -94,6 +99,18 @@ class DocHelper:
       window.removeEventListener('storage', applyTheme);
       window.removeEventListener('theme-change', applyTheme);
     };
+  }, []);
+
+  // Save markdown to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem('markeditor_content', docState.markdown);
+  }, [docState.markdown]);
+
+  // Reset to default content
+  const handleResetToDefault = useCallback(() => {
+    if (confirm('确定要重置为默认内容吗？当前修改将丢失。')) {
+      setDocState(prev => ({ ...prev, markdown: DEFAULT_MARKDOWN }));
+    }
   }, []);
 
   const handleMarkdownChange = (val: string) => {
@@ -153,10 +170,11 @@ class DocHelper:
         {view === AppView.EDITOR && (
           <div className="flex h-full animate-in fade-in duration-300">
             <div className="w-1/2 h-full border-r border-slate-200 bg-white">
-              <MarkdownEditor 
-                value={docState.markdown} 
-                onChange={handleMarkdownChange} 
+              <MarkdownEditor
+                value={docState.markdown}
+                onChange={handleMarkdownChange}
                 onProcessing={handleProcessing}
+                onResetToDefault={handleResetToDefault}
               />
             </div>
             <div className="w-1/2 h-full bg-[#f1f3f5] overflow-x-auto overflow-y-hidden">
