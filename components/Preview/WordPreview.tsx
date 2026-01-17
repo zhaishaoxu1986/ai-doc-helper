@@ -193,10 +193,12 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
       const doc = iframe.contentWindow?.document;
       if (!doc) return;
 
-      // 2. Prepare resources (Tailwind, Katex, Fonts)
-      const tailwindScript = `<script src="https://cdn.tailwindcss.com?plugins=typography"></script>`;
-      const katexCss = `<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">`;
-      const fonts = `<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet">`;
+      // 2. Prepare resources (reuse current document styles to avoid CDN usage)
+      const styleTags = Array.from(
+        document.querySelectorAll('style, link[rel="stylesheet"]')
+      )
+        .map((el) => el.outerHTML)
+        .join('\n');
       
       // 3. Get the HTML content
       const contentHtml = content.outerHTML;
@@ -208,9 +210,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
         <html>
           <head>
             <title>AI Doc Helper - Export PDF</title>
-            ${tailwindScript}
-            ${katexCss}
-            ${fonts}
+            ${styleTags}
             <style>
                body { background: white; margin: 0; padding: 0; }
                /* Ensure printer prints background colors */
@@ -848,7 +848,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
           >
             <ReactMarkdown 
               remarkPlugins={[remarkGfm, remarkMath]} 
-              rehypePlugins={[rehypeKatex]} 
+              rehypePlugins={[[rehypeKatex, { output: 'html' }]]}
               components={{
                 h1: ({node, ...props}) => <h1 
                   style={{
@@ -965,7 +965,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
              <div ref={wechatContentRef} style={{ width: '100%', fontFamily: '-apple-system-font, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", Arial, sans-serif' }}>
                 <ReactMarkdown 
                     remarkPlugins={[remarkGfm, remarkMath]} 
-                    rehypePlugins={[rehypeKatex]}
+                    rehypePlugins={[[rehypeKatex, { output: 'html' }]]}
                     components={{
                         h1: ({node, ...props}) => <h1 style={{ fontSize: '22px', fontWeight: 'bold', borderBottom: '2px solid var(--primary-color, #2563eb)', paddingBottom: '10px', marginBottom: '20px', marginTop: '30px', textAlign: 'center', color: '#333' }} {...props} />,
                         h2: ({node, ...props}) => <h2 style={{ fontSize: '18px', fontWeight: 'bold', borderLeft: '4px solid var(--primary-color, #2563eb)', paddingLeft: '10px', marginBottom: '16px', marginTop: '24px', backgroundColor: '#f3f4f6', padding: '5px 10px', color: '#333' }} {...props} />,

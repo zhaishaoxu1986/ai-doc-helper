@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Doc Helper - Markdown & Word Transformer</title>
-    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet">
@@ -20,40 +19,6 @@
     <!-- Excel parsing support -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #fcfcfc;
-        }
-        .prose-academic {
-            font-family: 'Noto Serif SC', serif;
-        }
-        .markdown-editor {
-            font-family: 'JetBrains Mono', monospace;
-            background-color: #f9fafb; /* 使用浅灰色背景，让白色鼠标更容易看清 */
-        }
-        /* Custom scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #e5e7eb;
-            border-radius: 3px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #d1d5db;
-        }
-        
-        /* Print Styles - Basic Cleanup */
-        @media print {
-            /* Handled by iframe print logic mostly, but reset body if needed */
-            body { background: white; }
-        }
-    </style>
 <script type="importmap">
 {
   "imports": {
