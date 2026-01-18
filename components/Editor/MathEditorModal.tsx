@@ -165,7 +165,7 @@ const MathEditorModal: React.FC<MathEditorModalProps> = ({
               </div>
             </div>
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between pt-3 border-t border-slate-100">
             <button
               onClick={() => setLatex('')}
               className="text-xs text-slate-400 hover:text-slate-600"

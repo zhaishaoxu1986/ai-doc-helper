@@ -123,7 +123,6 @@ const MathEditorController = forwardRef<MathEditorHandle, MathEditorControllerPr
     const [isOpen, setIsOpen] = useState(false);
     const [initialLatex, setInitialLatex] = useState('');
     const [initialDisplayMode, setInitialDisplayMode] = useState<MathDisplayMode>('block');
-    const [defaultDisplayMode, setDefaultDisplayMode] = useState<MathDisplayMode>('block');
     const [targetRange, setTargetRange] = useState<{ start: number; end: number } | null>(null);
 
     const parseMathSelection = (selected: string) => {
@@ -141,7 +140,7 @@ const MathEditorController = forwardRef<MathEditorHandle, MathEditorControllerPr
       if (isLocked) return;
       const textarea = textareaRef.current;
       let nextLatex = '';
-      let nextMode = defaultDisplayMode;
+      let nextMode: MathDisplayMode = 'block';
 
       if (textarea) {
         const start = textarea.selectionStart;
@@ -196,7 +195,6 @@ const MathEditorController = forwardRef<MathEditorHandle, MathEditorControllerPr
       updateHistory(nextValue);
       setIsOpen(false);
       setTargetRange(null);
-      setDefaultDisplayMode(displayMode);
 
       setTimeout(() => {
         textarea.focus();
