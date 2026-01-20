@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import mammoth from 'mammoth';
 import ReactMarkdown from 'react-markdown';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
@@ -9,6 +9,8 @@ import { Type } from '@google/genai';
 import { downloadDocx } from '../../utils/converter';
 import { WordTemplate } from '../../types';
 import { addHistoryItem } from '../../utils/historyManager';
+import { getPrompt, getPromptWithLocale, isDefaultPrompt, useI18n, type Locale } from '../../utils/i18n';
+import { MULTI_DOC_SAMPLES } from '../../utils/i18n-resources/multiDocSamples';
 
 // PDF & Excel Imports
 // Note: These libraries are loaded via <script> tags in index.html to expose global variables
@@ -39,64 +41,29 @@ interface ResearchTemplate {
     isCustom?: boolean;
 }
 
-const RESEARCH_TEMPLATES: ResearchTemplate[] = [
+const buildResearchTemplates = (
+  locale: Locale,
+  t: (key: string, vars?: Record<string, string | number>) => string
+): ResearchTemplate[] => [
     {
         id: 'paper',
-        title: '论文精读 (Paper Reading)',
+        title: t('multiDoc.template.paper.title'),
         icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253',
-        prompt: 'You are an academic research assistant. Please provide a detailed deep-dive reading report for the provided document(s).\nStructure:\n1. **Abstract & Core Contribution**: What is the main problem and solution?\n2. **Methodology**: Explain the technical approach in detail.\n3. **Experiments & Results**: Key metrics and comparison.\n4. **Critical Analysis**: Pros, cons, and limitations.\n5. **Future Work**: Potential research directions.\n\nKeep the tone academic and professional.'
+        prompt: getPrompt('multiDoc.template.paper', locale)
     },
     {
         id: 'theory',
-        title: '理论学习 (Theory Study)',
+        title: t('multiDoc.template.theory.title'),
         icon: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z',
-        prompt: 'You are a professor. Please explain the theoretical concepts found in these documents.\n1. **Concept Definition**: Define key terms clearly.\n2. **Core Principles**: Explain the "Why" and "How" behind the theory.\n3. **Examples**: Provide analogies or simple examples to illustrate complex points.\n4. **Summary**: Key takeaways for a student.'
+        prompt: getPrompt('multiDoc.template.theory', locale)
     },
     {
         id: 'code',
-        title: '代码/功能分析 (Code Analysis)',
+        title: t('multiDoc.template.code.title'),
         icon: 'M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4',
-        prompt: 'You are a senior software engineer. Analyze the provided code or technical design docs.\n1. **Architecture Overview**: High-level structure.\n2. **Key Functions**: Explain the most important classes/functions.\n3. **Logic Flow**: How data moves through the system.\n4. **Suggestions**: Potential improvements or bugs.'
+        prompt: getPrompt('multiDoc.template.code', locale)
     }
 ];
-
-const DEFAULT_RENAME_PROMPT = `Analyze the provided file contents to extract key metadata: Date, Author, Assignment Batch (e.g., "First Assignment", "第X次作业"), and Topic/Content.
-Goal: Rename these files exactly matching the target naming pattern provided.
-Output: A JSON array of objects, each containing "originalName", "newName", and "reason".
-Important: 
-1. If the pattern includes "第X次作业", extract the specific number from the text (e.g., if text says "Third Assignment", output "第三次作业").
-2. Format dates strictly according to the pattern (e.g., YYYYMMDD).
-3. Extract the specific topic/content for the assignment.`;
-
-const DEFAULT_REPORT_PROMPT = `You are a team leader assistant. 
-Goal: Aggregate the following weekly reports into a single, cohesive team weekly report.
-
-Requirements:
-1. **Header**: Start by explicitly listing the names of all members who submitted a report (e.g., "Contributors: Name1, Name2...").
-2. **Categorization**: Group the updates by technical domain (e.g., RL, CV, NLP, LLM Fine-tuning) rather than just listing by person.
-3. **Structure**: Use clear Markdown headings for "Team Progress", "Key Learnings", and "Next Steps".
-4. **Tone**: Professional and concise.
-5. **Language**: The output report MUST be in the same language as the input contents (e.g., if inputs are Chinese, output Chinese; if mixed, default to Chinese).
-
-Input: A list of report contents from different team members.`;
-
-const DEFAULT_MISSING_PROMPT = `You are a teaching assistant checking homework submissions.
-Goal: Compare the provided "Class Roster" against the list of "Submitted Files".
-
-Rules:
-1. **Fuzzy Match**: Match names even if the filename contains extra text (e.g., Roster: "ZhangSan", File: "Homework-ZhangSan-v2.docx" -> Match).
-2. **Content Awareness**: If the filename is ambiguous, assume the "Snippet" content might contain the author's name.
-3. **Categorize**:
-   - "submitted": The name from the roster that was found in the files.
-   - "missing": The name from the roster that was NOT found.
-   - "extras": Filenames that do not match anyone in the roster.
-
-Output strictly valid JSON with this structure:
-{
-  "submitted": [{"name": "RosterName", "fileName": "FileName"}],
-  "missing": ["RosterName"],
-  "extras": ["FileName"]
-}`;
 
 // Define mode-specific state type
 interface ModeState {
@@ -188,6 +155,7 @@ const loadModeState = (mode: Mode): ModeState => {
 };
 
 const MultiDocProcessor: React.FC = () => {
+  const { locale, t } = useI18n();
   const [mode, setMode] = useState<Mode>(() => {
     const saved = localStorage.getItem('multidoc_mode');
     return (saved as Mode) || 'rename';
@@ -212,21 +180,22 @@ const MultiDocProcessor: React.FC = () => {
   });
   
   // Research Mode
-  const [templates, setTemplates] = useState<ResearchTemplate[]>(RESEARCH_TEMPLATES);
+  const baseTemplates = useMemo(() => buildResearchTemplates(locale, t), [locale, t]);
+  const [templates, setTemplates] = useState<ResearchTemplate[]>(baseTemplates);
   const [activeTemplate, setActiveTemplate] = useState<ResearchTemplate>(() => {
     const saved = localStorage.getItem('multidoc_active_template');
     if (saved) {
       try {
         return JSON.parse(saved);
       } catch (e) {
-        return RESEARCH_TEMPLATES[0];
+        return baseTemplates[0];
       }
     }
-    return RESEARCH_TEMPLATES[0];
+    return baseTemplates[0];
   });
   const [customPrompt, setCustomPrompt] = useState(() => {
     const saved = localStorage.getItem('multidoc_custom_prompt');
-    return saved || RESEARCH_TEMPLATES[0].prompt;
+    return saved || baseTemplates[0].prompt;
   });
   
   // Custom Template Creation
@@ -240,9 +209,9 @@ const MultiDocProcessor: React.FC = () => {
 
   // Settings
   const [showSettings, setShowSettings] = useState(false);
-  const [renamePrompt, setRenamePrompt] = useState(() => localStorage.getItem('prompt_rename') || DEFAULT_RENAME_PROMPT);
-  const [reportPrompt, setReportPrompt] = useState(() => localStorage.getItem('prompt_report') || DEFAULT_REPORT_PROMPT);
-  const [missingPrompt, setMissingPrompt] = useState(() => localStorage.getItem('prompt_missing') || DEFAULT_MISSING_PROMPT);
+  const [renamePrompt, setRenamePrompt] = useState(() => getPromptWithLocale('prompt_rename', 'multiDoc.rename', locale));
+  const [reportPrompt, setReportPrompt] = useState(() => getPromptWithLocale('prompt_report', 'multiDoc.report', locale));
+  const [missingPrompt, setMissingPrompt] = useState(() => getPromptWithLocale('prompt_missing', 'multiDoc.missing', locale));
   
   const [tempPrompt, setTempPrompt] = useState('');
 
@@ -353,22 +322,44 @@ const MultiDocProcessor: React.FC = () => {
     localStorage.setItem('multidoc_custom_prompt', customPrompt);
   }, [customPrompt]);
 
-  // Load Custom Templates on Mount
+  // Sync templates and prompts when locale changes
   useEffect(() => {
     const savedTemplates = localStorage.getItem('custom_research_templates');
+    let customTemplates: ResearchTemplate[] = [];
     if (savedTemplates) {
         try {
-            const parsed = JSON.parse(savedTemplates);
-            setTemplates([...RESEARCH_TEMPLATES, ...parsed]);
+            customTemplates = JSON.parse(savedTemplates);
         } catch (e) {
             console.error("Failed to load custom templates", e);
         }
     }
-  }, []);
+
+    const merged = [...baseTemplates, ...customTemplates];
+    setTemplates(merged);
+
+    setActiveTemplate(prev => {
+      if (prev?.isCustom) return prev;
+      return baseTemplates.find(t => t.id === prev?.id) || baseTemplates[0];
+    });
+
+    setCustomPrompt(prev => {
+      const isDefault =
+        isDefaultPrompt('multiDoc.template.paper', prev) ||
+        isDefaultPrompt('multiDoc.template.theory', prev) ||
+        isDefaultPrompt('multiDoc.template.code', prev);
+      if (!isDefault) return prev;
+      const target = baseTemplates.find(t => t.id === activeTemplate?.id) || baseTemplates[0];
+      return target.prompt;
+    });
+
+    setRenamePrompt(getPromptWithLocale('prompt_rename', 'multiDoc.rename', locale));
+    setReportPrompt(getPromptWithLocale('prompt_report', 'multiDoc.report', locale));
+    setMissingPrompt(getPromptWithLocale('prompt_missing', 'multiDoc.missing', locale));
+  }, [baseTemplates, locale]);
 
   const handleCreateTemplate = () => {
       if (!newTemplateTitle.trim() || !newTemplatePrompt.trim()) {
-          alert("请输入标题和 Prompt");
+          alert(t('multiDoc.template.alert.missingFields'));
           return;
       }
       const newTpl: ResearchTemplate = {
@@ -393,33 +384,23 @@ const MultiDocProcessor: React.FC = () => {
 
  const optimizeTemplatePrompt = async () => {
      if (!newTemplateTitle.trim()) {
-         alert('请先输入功能名称');
+         alert(t('multiDoc.template.alert.missingTitle'));
          return;
      }
      
      const config = getModelConfig('text');
      if (!config.apiKey) {
-         alert('请先在右上角用户中心配置 API Key');
+         alert(t('multiDoc.alert.missingApiKey'));
          return;
      }
 
      setIsOptimizingTemplatePrompt(true);
      
      try {
-         const contextPrompt = `Please help me create a professional AI prompt for a multi-document research tool.
-
-Template Name: "${newTemplateTitle}"
-${newTemplatePrompt.trim() ? `User's partial idea: "${newTemplatePrompt}"` : ''}
-
-Requirements for prompt:
-1. It should tell AI to analyze and synthesize information from multiple uploaded documents
-2. Should generate comprehensive, well-structured markdown reports
-3. Should highlight key findings, comparisons, and insights
-4. Should maintain academic/professional tone
-5. Should support various document types (PDF, Word, Excel, code, etc.)
-6. Language preference: ${newTemplateTitle.includes('中文') || newTemplateTitle.includes('翻译') ? 'Use Chinese where appropriate' : 'Use English'}
-
-Please respond with ONLY complete prompt text, nothing else.`;
+         const contextPrompt = getPrompt('multiDoc.template.optimize', locale, {
+           title: newTemplateTitle,
+           idea: newTemplatePrompt.trim()
+         });
 
          const stream = generateContentStream({
              apiKey: config.apiKey,
@@ -436,7 +417,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
 
      } catch (err) {
          console.error('AI Optimization Error:', err);
-         alert('AI 优化失败，请检查配置或网络连接。');
+         alert(t('multiDoc.template.alert.optimizeFail'));
      } finally {
          setIsOptimizingTemplatePrompt(false);
      }
@@ -444,7 +425,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
 
  const handleDeleteTemplate = (id: string, e: React.MouseEvent) => {
      e.stopPropagation();
-     if (!confirm("确定要删除这个自定义模板吗？")) return;
+     if (!confirm(t('multiDoc.template.confirm.delete'))) return;
 
       const updatedTemplates = templates.filter(t => t.id !== id);
       setTemplates(updatedTemplates);
@@ -560,7 +541,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
           const cleanList = text.split(/\r?\n/).map(l => l.trim()).filter(l => l).join('\n');
           setCurrentRosterText(cleanList);
       } catch (err) {
-          alert('读取名单失败，请重试');
+          alert(t('multiDoc.alert.rosterReadFail'));
       }
       if (e.target) e.target.value = '';
   };
@@ -578,7 +559,8 @@ Please respond with ONLY complete prompt text, nothing else.`;
   };
 
   const loadSampleFiles = async () => {
-    let samples: any[] = [];
+    const samplesByLocale = MULTI_DOC_SAMPLES[locale] || MULTI_DOC_SAMPLES.zh;
+    let samples: { name: string; text: string }[] = [];
     
     // 清除旧数据
     setCurrentFiles([]);
@@ -586,55 +568,22 @@ Please respond with ONLY complete prompt text, nothing else.`;
     setCurrentCheckResult(null);
 
     if (mode === 'rename') {
-        samples = [
-            { name: "李四_2.docx", text: "【实验报告】\n\n实验人：李四\n日期：2026年3月15日\n实验名称：物理光学干涉实验\n\n备注：这是本学期的第三次作业，请查收。" },
-            { name: "draft_2025_wangwu.docx", text: "【期末提交】\n汇报人：王五\n时间：2025/12/20\n作业批次：第八次作业\n作业主题：前端架构设计与Vue3迁移实践\n\n正文：..." },
-            { name: "新建文本文档 (3).docx", text: "课程：数据结构\n姓名：张三\n提交时间：2026-01-01\n内容：第一次作业 - 二叉树遍历算法\n\n代码如下..." },
-            { name: "final_v2_resubmit.docx", text: "姓名：赵六\nDate: 2025.11.11\nSubject: 数据库系统原理\nBatch: 第五次作业\n\nSQL优化实验报告..." },
-            { name: "20240909_unknown.docx", text: "学生：陈七\n提交日期：2024年9月9日\n作业：第二次作业\n题目：操作系统进程调度\n\n..." }
-        ];
-        setCurrentRenamePattern('20260101_张三_第一次作业_作业内容.docx');
+        samples = samplesByLocale.rename;
+        setCurrentRenamePattern(samplesByLocale.renamePatternSample);
     } else if (mode === 'report') {
-        samples = [
-            { name: "周报_萧炎.docx", text: "姓名：萧炎\n部门：强化学习组\n本周工作总结：\n1. 深入学习了强化学习算法基础。\n2. 重点研究了 PPO 算法的超参数调优。\n\n下周计划：\n- 在仿真环境中测试新模型。" },
-            { name: "周报_林动.docx", text: "汇报人：林动\n岗位：CV算法工程师\n\n本周进度：\n- 专注于计算机视觉（CV）领域的经典算法复习。\n- 完成了 YOLOv8 的部署测试。\n\n遇到的问题：\n- 显存占用过高，需优化。" },
-            { name: "周报_牧尘.docx", text: "姓名：牧尘\n组别：NLP组\n\n本周产出：\n1. 完成了 BERT 模型的微调实验。\n2. 阅读了 3 篇关于 RAG (检索增强生成) 的最新论文。\n\n下周重点：\n- 搭建本地知识库问答系统。" },
-            { name: "周报_罗峰.docx", text: "汇报人：罗峰\n部门：大模型训练\n\n工作内容：\n- 监控 7B 模型预训练进度，Loss 收敛正常。\n- 清洗了 100GB 的高质量代码数据集。\n\n风险：\n- 算力资源紧张，需申请更多 GPU。" }
-        ];
+        samples = samplesByLocale.report;
     } else if (mode === 'missing') {
-        // 设置一个花名册
-        setCurrentRosterText("孙悟空\n猪八戒\n沙悟净\n唐三藏\n白龙马");
-        
-        // 模拟提交的文件
-        samples = [
-            { name: "作业_孙悟空.docx", text: "这是孙悟空的作业。" },
-            { name: "八戒的检讨书.docx", text: "检讨人：猪八戒\n内容：我错了..." },
-            { name: "卷帘大将_报告.docx", text: "姓名：沙悟净\n职务：卷帘大将\n汇报..." },
-            { name: "UNKNOWN_FILE.docx", text: "没有写名字的神秘文件..." }
-        ];
+        setCurrentRosterText(samplesByLocale.missing.roster);
+        samples = samplesByLocale.missing.files;
     } else if (mode === 'deep_research') {
-        // Deep Research Samples - Based on Active Template
         if (activeTemplate.id === 'paper') {
-            samples = [
-                { name: "Paper_Attention_Is_All_You_Need.txt", text: "Abstract\nThe dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely..." },
-                { name: "Notes_Transformer_Arch.txt", text: "Self-Attention Mechanism:\nQueries, Keys, Values.\nScaled Dot-Product Attention = softmax(QK^T / sqrt(d_k))V.\nMulti-Head Attention allows the model to jointly attend to information from different representation subspaces." }
-            ];
+            samples = samplesByLocale.deepResearch.paper;
         } else if (activeTemplate.id === 'theory') {
-             samples = [
-                { name: "Quantum_Mechanics_Intro.txt", text: "The Schrödinger equation is a linear partial differential equation that governs the wave function of a quantum-mechanical system.\n\nConcept 1: Wave-Particle Duality\nEvery particle or quantum entity may be described as either a particle or a wave." },
-                { name: "Relativity_Notes.docx", text: "Special relativity is a theory of the structure of spacetime. It was introduced in Einstein's 1905 paper 'On the Electrodynamics of Moving Bodies'." }
-            ];
+            samples = samplesByLocale.deepResearch.theory;
         } else if (activeTemplate.id === 'code') {
-             samples = [
-                { name: "attention.py", text: "import torch\nimport torch.nn as nn\nimport torch.nn.functional as F\n\nclass MultiHeadAttention(nn.Module):\n    def __init__(self, d_model, num_heads):\n        super().__init__()\n        assert d_model % num_heads == 0\n        self.d_model = d_model\n        self.num_heads = num_heads\n        self.d_k = d_model // num_heads\n        \n        self.W_q = nn.Linear(d_model, d_model)\n        self.W_k = nn.Linear(d_model, d_model)\n        self.W_v = nn.Linear(d_model, d_model)\n        self.W_o = nn.Linear(d_model, d_model)\n    \n    def scaled_dot_product_attention(self, Q, K, V, mask=None):\n        attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / torch.sqrt(torch.tensor(self.d_k, dtype=torch.float32))\n        if mask is not None:\n            attn_scores = attn_scores.masked_fill(mask == 0, -1e9)\n        attn_probs = F.softmax(attn_scores, dim=-1)\n        output = torch.matmul(attn_probs, V)\n        return output\n    \n    def forward(self, x, mask=None):\n        batch_size = x.size(0)\n        Q = self.W_q(x).view(batch_size, -1, self.num_heads, self.d_k).transpose(1, 2)\n        K = self.W_k(x).view(batch_size, -1, self.num_heads, self.d_k).transpose(1, 2)\n        V = self.W_v(x).view(batch_size, -1, self.num_heads, self.d_k).transpose(1, 2)\n        \n        attn_output = self.scaled_dot_product_attention(Q, K, V, mask)\n        attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, -1, self.d_model)\n        return self.W_o(attn_output)" },
-                { name: "transformer.py", text: "import torch\nimport torch.nn as nn\n\nclass FeedForward(nn.Module):\n    def __init__(self, d_model, d_ff, dropout=0.1):\n        super().__init__()\n        self.linear1 = nn.Linear(d_model, d_ff)\n        self.dropout = nn.Dropout(dropout)\n        self.linear2 = nn.Linear(d_ff, d_model)\n    \n    def forward(self, x):\n        return self.linear2(self.dropout(F.relu(self.linear1(x))))\n\nclass TransformerBlock(nn.Module):\n    def __init__(self, d_model, num_heads, d_ff, dropout=0.1):\n        super().__init__()\n        self.attention = MultiHeadAttention(d_model, num_heads)\n        self.norm1 = nn.LayerNorm(d_model)\n        self.norm2 = nn.LayerNorm(d_model)\n        self.feed_forward = FeedForward(d_model, d_ff, dropout)\n        self.dropout = nn.Dropout(dropout)\n    \n    def forward(self, x, mask=None):\n        attn_output = self.attention(x, mask)\n        x = self.norm1(x + self.dropout(attn_output))\n        ff_output = self.feed_forward(x)\n        x = self.norm2(x + self.dropout(ff_output))\n        return x\n\nclass Transformer(nn.Module):\n    def __init__(self, vocab_size, d_model=512, num_heads=8, \n                 num_layers=6, d_ff=2048, max_seq_len=512):\n        super().__init__()\n        self.token_embedding = nn.Embedding(vocab_size, d_model)\n        self.pos_embedding = nn.Embedding(max_seq_len, d_model)\n        self.layers = nn.ModuleList([\n            TransformerBlock(d_model, num_heads, d_ff) \n            for _ in range(num_layers)\n        ])\n        self.dropout = nn.Dropout(0.1)\n    \n    def forward(self, x, mask=None):\n        seq_len = x.size(1)\n        positions = torch.arange(0, seq_len, dtype=torch.long, device=x.device)\n        x = self.token_embedding(x) + self.pos_embedding(positions)\n        x = self.dropout(x)\n        for layer in self.layers:\n            x = layer(x, mask)\n        return x" }
-            ];
+            samples = samplesByLocale.deepResearch.code;
         } else {
-            // Custom or default
-             samples = [
-                { name: "Research_Material_1.txt", text: "This is a sample document for research analysis." },
-                { name: "Research_Material_2.txt", text: "Additional context and data points for the topic." }
-            ];
+            samples = samplesByLocale.deepResearch.fallback;
         }
     }
 
@@ -689,10 +638,13 @@ Please respond with ONLY complete prompt text, nothing else.`;
     addHistoryItem({
       module: 'multidoc',
       status: 'success',
-      title: currentMode === 'rename' ? `智能重命名 - ${currentFiles.length} 个文件` :
-             currentMode === 'report' ? `周报聚合 - ${currentFiles.length} 个报告` :
-             currentMode === 'deep_research' ? `深度调研 - ${activeTemplate.title}` :
-             `作业核对 - ${currentRosterText.split('\n').filter(l => l.trim()).length} 人名单`,
+      title: currentMode === 'rename'
+        ? t('multiDoc.history.rename.title', { count: currentFiles.length })
+        : currentMode === 'report'
+          ? t('multiDoc.history.report.title', { count: currentFiles.length })
+          : currentMode === 'deep_research'
+            ? t('multiDoc.history.deepResearch.title', { title: activeTemplate.title })
+            : t('multiDoc.history.check.title', { count: currentRosterText.split('\n').filter(l => l.trim()).length }),
       preview: result.slice(0, 200) + (result.length > 200 ? '...' : ''),
       fullResult: result,
       metadata: {
@@ -713,11 +665,11 @@ Please respond with ONLY complete prompt text, nothing else.`;
         originalName: f.file.name,
         contentStart: f.contentSnippet.replace(/\n/g, ' ').substring(0, 500)
       }));
-      const effectivePattern = getCurrentRenamePattern() || 'YYYY-MM-DD_作者_文件主题.ext';
+      const effectivePattern = getCurrentRenamePattern() || t('multiDoc.renamePattern.default');
       const prompt = `${renamePrompt}\n\nIMPORTANT: Use this Target Naming Pattern: "${effectivePattern}"\n\nFiles to process:\n${JSON.stringify(inputs, null, 2)}`;
       
       // 🐛 调试：打印完整的 Prompt
-      console.log('=== 智能重命名 Prompt ===');
+      console.log('=== Rename Prompt ===');
       console.log(prompt);
       
       const response = await generateContent({
@@ -730,17 +682,17 @@ Please respond with ONLY complete prompt text, nothing else.`;
       
       // 🐛 调试：打印 AI 原始响应（前500字符）
       const truncatedRawResponse = response.substring(0, 500);
-      console.log('=== AI 原始响应（前500字符） ===');
+      console.log('=== AI Raw Response (first 500 chars) ===');
       console.log(truncatedRawResponse);
       
       let jsonStr = response.trim().replace(/```json|```/g, '');
       
       // 🐛 调试：打印 AI 响应的完整长度
-      console.log('=== AI 响应完整长度 ===');
+      console.log('=== AI Response Length ===');
       console.log(response.length);
       
       // 🐛 调试：打印清理后的 JSON 字符串
-      console.log('=== 清理后的 JSON 字符串（移除 ```json 标记） ===');
+      console.log('=== Cleaned JSON (removed ```json) ===');
       console.log(jsonStr);
       
       let mapping;
@@ -750,35 +702,35 @@ Please respond with ONLY complete prompt text, nothing else.`;
         mapping = JSON.parse(jsonStr);
         
         // 🐛 调试：打印解析成功
-        console.log('=== JSON 解析成功 ===');
-        console.log('解析对象类型:', typeof mapping, '是否为数组:', Array.isArray(mapping));
-        console.log('解析结果详情:', JSON.stringify(mapping, null, 2));
+        console.log('=== JSON Parse Success ===');
+        console.log('Parsed type:', typeof mapping, 'isArray:', Array.isArray(mapping));
+        console.log('Parsed result:', JSON.stringify(mapping, null, 2));
         
       } catch (parseError) {
         // 🐛 调试：打印解析失败
-        console.log('=== JSON 解析失败 ===');
-        console.log('错误信息:', parseError.message);
-        console.log('尝试的 JSON 字符串:', jsonStr);
-        throw new Error(`AI返回格式错误: ${parseError.message}`);
+        console.log('=== JSON Parse Failed ===');
+        console.log('Error:', parseError.message);
+        console.log('JSON string:', jsonStr);
+        throw new Error(t('multiDoc.error.aiFormat', { message: parseError.message }));
       }
 
       // 验证返回数据格式
-      console.log('=== 开始验证返回数据格式 ===');
+      console.log('=== Validate Response Format ===');
       
       // AI 可能返回 { files: [...] } 或直接返回 [...]
       if (!Array.isArray(mapping) && mapping.files && Array.isArray(mapping.files)) {
-        console.log('检测到包含 files 字段的对象，提取 files 数组');
+        console.log('Detected object with files field; extracting files array');
         mapping = mapping.files;
       }
       
       if (!Array.isArray(mapping)) {
-        console.error('❌ 错误：AI返回的不是数组');
-        throw new Error(`AI返回格式错误: 期望数组格式，实际收到 ${typeof mapping}`);
+        console.error('❌ Error: AI returned non-array');
+        throw new Error(t('multiDoc.error.aiFormatType', { type: typeof mapping }));
       }
       
-      console.log('✓ 数组验证通过，数组长度:', mapping.length);
+      console.log('✓ Array validation passed, length:', mapping.length);
       
-      console.log('✓ 数组验证通过，数组长度:', mapping.length);
+      console.log('✓ Array validation passed, length:', mapping.length);
       
       // 验证数组内容
       let validCount = 0;
@@ -790,32 +742,32 @@ Please respond with ONLY complete prompt text, nothing else.`;
         
         if (isValid) {
           // 🐛 调试：打印每个元素的验证结果
-          console.log(`元素 ${validCount + 1}:`, JSON.stringify(m, null, 2));
+          console.log(`Item ${validCount + 1}:`, JSON.stringify(m, null, 2));
           validCount++;
         }
         
         return isValid;
       });
       
-      console.log('✓ 有效的重命名结果数量:', validMapping.length);
+      console.log('✓ Valid rename results:', validMapping.length);
 
       if (validMapping.length === 0) {
-        throw new Error('AI返回的数据中没有任何有效的重命名结果');
+        throw new Error(t('multiDoc.error.noValidRename'));
       }
 
-      console.log('AI返回的有效重命名结果:', validMapping);
+      console.log('AI valid rename results:', validMapping);
 
       setCurrentFiles(prev => prev.map(f => {
         const match = validMapping.find((m: any) => m && m.originalName === f.file.name);
         
         // 🐛 调试：打印每个文件的匹配结果
-        console.log(`正在处理文件: ${f.file.name}`);
-        console.log('AI原始名称:', f.file.name);
+        console.log(`Processing file: ${f.file.name}`);
+        console.log('AI original name:', f.file.name);
         if (match) {
-          console.log(`✅ 找到匹配，新名称: ${match.newName}`);
-          console.log('  理由:', match.reason);
+          console.log(`✅ Match found, new name: ${match.newName}`);
+          console.log('  Reason:', match.reason);
         } else {
-          console.warn('⚠️ 文件未找到匹配');
+          console.warn('⚠️ No match found');
         }
         
         return match ? { ...f, newName: match.newName, reason: match.reason, status: 'done' } : f;
@@ -827,7 +779,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
       addHistoryItem({
         module: 'multidoc',
         status: 'success',
-        title: `智能重命名 - ${currentFiles.length} 个文件 (成功 ${renamedCount} 个)`,
+        title: t('multiDoc.history.rename.successTitle', { total: currentFiles.length, renamed: renamedCount }),
         preview: validMapping.slice(0, 3).map((m: any) => `${m.originalName} → ${m.newName}`).join('\n') + (validMapping.length > 3 ? '\n...' : ''),
         fullResult: JSON.stringify(validMapping),
         metadata: {
@@ -839,7 +791,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
       });
     } catch (e) {
       console.error(e);
-      alert("AI 处理失败，请检查 Prompt 或重试");
+      alert(t('multiDoc.alert.renameFail'));
     } finally {
       setIsProcessing(false);
     }
@@ -852,11 +804,11 @@ Please respond with ONLY complete prompt text, nothing else.`;
     setShouldStop(false);
     setCurrentResultReport('');
     setProcessingStatus('preparing');
-    setProgressText(`📚 正在准备 ${currentFiles.length} 个文件...`);
+    setProgressText(t('multiDoc.progress.preparingFiles', { count: currentFiles.length }));
     
     try {
       setProcessingStatus('analyzing');
-      setProgressText(`🔍 正在分析 ${currentFiles.length} 个文件内容...`);
+      setProgressText(t('multiDoc.progress.analyzingFiles', { count: currentFiles.length }));
       
       // Simulate file analysis progress
       for (let i = 0; i < currentFiles.length; i++) {
@@ -874,7 +826,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
       const prompt = `${reportPrompt}\n\nReports Content:\n${combinedContent}`;
       
       setProcessingStatus('streaming');
-      setProgressText('✍️ AI 正在生成周报内容...');
+      setProgressText(t('multiDoc.progress.generatingReport'));
       
       // Use streaming for real-time output
       const stream = generateContentStream({
@@ -887,7 +839,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
       let fullText = '';
       for await (const chunk of stream) {
         if (shouldStop) {
-          setProgressText('⏸️ 已停止生成');
+          setProgressText(t('multiDoc.progress.stopped'));
           setProcessingStatus('completed');
           setIsProcessing(false);
           return;
@@ -898,7 +850,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
       
       setCurrentFiles(prev => prev.map(f => ({ ...f, status: 'done' })));
       setProcessingStatus('completed');
-      setProgressText('✅ 周报生成完成！');
+      setProgressText(t('multiDoc.progress.reportDone'));
       
       // Save to history
       saveToHistory('report', fullText);
@@ -909,7 +861,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
       }, 3000);
     } catch (e) {
       console.error(e);
-      setProgressText('❌ 生成失败，请重试');
+      setProgressText(t('multiDoc.progress.failedRetry'));
       setProcessingStatus('completed');
       setTimeout(() => {
         setProcessingStatus(null);
@@ -924,7 +876,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
       const currentFiles = getCurrentFiles();
       const currentRosterText = getCurrentRosterText();
       if (currentFiles.length === 0 || !currentRosterText.trim()) {
-          alert("请确保已输入应交名单并上传了文件。");
+          alert(t('multiDoc.alert.missingRosterOrFiles'));
           return;
       }
       setIsProcessing(true);
@@ -963,8 +915,8 @@ Please respond with ONLY complete prompt text, nothing else.`;
           addHistoryItem({
             module: 'multidoc',
             status: 'success',
-            title: `作业核对 - ${getCurrentRosterText().split('\n').filter(l => l.trim()).length} 人名单`,
-            preview: `已提交: ${result.submitted.length} 人, 未交: ${result.missing.length} 人`,
+            title: t('multiDoc.history.check.title', { count: getCurrentRosterText().split('\n').filter(l => l.trim()).length }),
+            preview: t('multiDoc.history.check.preview', { submitted: result.submitted.length, missing: result.missing.length }),
             fullResult: JSON.stringify(result),
             metadata: {
               docMode: 'missing',
@@ -974,7 +926,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
 
       } catch (e) {
           console.error(e);
-          alert("AI 核对失败，请检查网络或配置。");
+          alert(t('multiDoc.alert.checkFail'));
       } finally {
           setIsProcessing(false);
       }
@@ -987,11 +939,11 @@ Please respond with ONLY complete prompt text, nothing else.`;
       setShouldStop(false);
       setCurrentResultReport('');
       setProcessingStatus('preparing');
-      setProgressText(`📚 正在准备 ${currentFiles.length} 个文档...`);
+      setProgressText(t('multiDoc.progress.preparingDocs', { count: currentFiles.length }));
       
       try {
           setProcessingStatus('analyzing');
-          setProgressText(`🔍 正在深度分析 ${currentFiles.length} 个文档...`);
+          setProgressText(t('multiDoc.progress.analyzingDocs', { count: currentFiles.length }));
           
           // Simulate file analysis progress
           for (let i = 0; i < currentFiles.length; i++) {
@@ -1014,7 +966,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
           const prompt = `${customPrompt}\n\nDocuments to Analyze:\n${combinedDocs}`;
           
           setProcessingStatus('streaming');
-          setProgressText('✍️ AI 正在生成深度研究报告...');
+          setProgressText(t('multiDoc.progress.generatingDeepReport'));
           
           // Use streaming for real-time output
           const stream = generateContentStream({
@@ -1027,7 +979,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
           let fullText = '';
           for await (const chunk of stream) {
               if (shouldStop) {
-                  setProgressText('⏸️ 已停止生成');
+                  setProgressText(t('multiDoc.progress.stopped'));
                   setProcessingStatus('completed');
                   setIsProcessing(false);
                   return;
@@ -1038,7 +990,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
           
           setCurrentFiles(prev => prev.map(f => ({ ...f, status: 'done' })));
           setProcessingStatus('completed');
-          setProgressText('✅ 深度调研完成！');
+          setProgressText(t('multiDoc.progress.deepReportDone'));
           
           // Save to history
           saveToHistory('deep_research', fullText);
@@ -1050,7 +1002,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
 
       } catch (e) {
           console.error(e);
-          setProgressText('❌ 生成失败，请检查文档大小或 API 配额。');
+          setProgressText(t('multiDoc.progress.deepReportFail'));
           setProcessingStatus('completed');
           setTimeout(() => {
               setProcessingStatus(null);
@@ -1141,10 +1093,10 @@ Please respond with ONLY complete prompt text, nothing else.`;
   };
 
   const getActionName = () => {
-      if (mode === 'rename') return '开始生成文件名';
-      if (mode === 'report') return '开始合并周报';
-      if (mode === 'deep_research') return '生成深度报告';
-      return '开始核对名单';
+      if (mode === 'rename') return t('multiDoc.action.rename');
+      if (mode === 'report') return t('multiDoc.action.report');
+      if (mode === 'deep_research') return t('multiDoc.action.deepResearch');
+      return t('multiDoc.action.check');
   };
 
   const runProcess = () => {
@@ -1157,8 +1109,8 @@ Please respond with ONLY complete prompt text, nothing else.`;
   return (
     <div className="p-6 lg:p-12 max-w-[1440px] mx-auto min-h-full flex flex-col">
       <div className="text-center mb-8">
-        <h2 className="text-3xl font-extrabold text-slate-900 mb-2">多文档智能处理</h2>
-        <p className="text-slate-500">批量命名整理 • 团队周报聚合 • Deep Research 深度分析</p>
+        <h2 className="text-3xl font-extrabold text-slate-900 mb-2">{t('multiDoc.title')}</h2>
+        <p className="text-slate-500">{t('multiDoc.subtitle')}</p>
       </div>
 
       {/* Mode Switcher */}
@@ -1169,25 +1121,25 @@ Please respond with ONLY complete prompt text, nothing else.`;
             className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap flex items-center ${mode === 'deep_research' ? 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
           >
             <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
-            Deep Research
+            {t('multiDoc.mode.deepResearch')}
           </button>
           <button
             onClick={() => { setMode('report'); clearFiles(); }}
             className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${mode === 'report' ? 'bg-white text-[var(--primary-color)] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
-            📊 周报整合
+            {t('multiDoc.mode.report')}
           </button>
           <button
             onClick={() => { setMode('missing'); clearFiles(); }}
             className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${mode === 'missing' ? 'bg-white text-rose-500 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
-            📋 查缺补漏
+            {t('multiDoc.mode.missing')}
           </button>
           <button
             onClick={() => { setMode('rename'); clearFiles(); }}
             className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${mode === 'rename' ? 'bg-white text-[var(--primary-color)] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
-            📂 智能重命名
+            {t('multiDoc.mode.rename')}
           </button>
         </div>
       </div>
@@ -1198,13 +1150,19 @@ Please respond with ONLY complete prompt text, nothing else.`;
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
             <div>
                 <h3 className="text-xl font-bold text-slate-800">
-                    {mode === 'rename' ? '文件批量重命名' : mode === 'report' ? '多文档内容聚合' : mode === 'deep_research' ? '深度文档调研' : '作业提交核对'}
+                    {mode === 'rename'
+                      ? t('multiDoc.section.rename.title')
+                      : mode === 'report'
+                        ? t('multiDoc.section.report.title')
+                        : mode === 'deep_research'
+                          ? t('multiDoc.section.deepResearch.title')
+                          : t('multiDoc.section.missing.title')}
                 </h3>
                 <p className="text-sm text-slate-500 mt-1">
-                    {mode === 'rename' && '上传多个命名混乱的文件，AI 将根据内容自动生成规范文件名。'}
-                    {mode === 'report' && '上传多个成员的周报/文档，AI 将提取关键信息生成汇总报告。'}
-                    {mode === 'missing' && '输入应交名单并上传文件，AI 自动核对谁还没交作业。'}
-                    {mode === 'deep_research' && '支持 PDF/Word/Excel/代码，智能生成学术级调研报告或分析文档。'}
+                    {mode === 'rename' && t('multiDoc.section.rename.desc')}
+                    {mode === 'report' && t('multiDoc.section.report.desc')}
+                    {mode === 'missing' && t('multiDoc.section.missing.desc')}
+                    {mode === 'deep_research' && t('multiDoc.section.deepResearch.desc')}
                 </p>
             </div>
             <div className="flex space-x-3 w-full md:w-auto flex-wrap gap-y-2">
@@ -1213,14 +1171,14 @@ Please respond with ONLY complete prompt text, nothing else.`;
                     className="flex-1 md:flex-none flex items-center justify-center px-3 py-2 text-xs font-bold text-slate-500 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
                  >
                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                     配置 Prompt
+                     {t('multiDoc.action.configurePrompt')}
                  </button>
                  <button
                     onClick={() => fileInputRef.current?.click()}
                     className="flex-1 md:flex-none bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition-all flex items-center justify-center"
                  >
                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                     添加文件
+                     {t('multiDoc.action.addFiles')}
                  </button>
                  <input type="file" multiple ref={fileInputRef} className="hidden" onChange={handleFileSelect} accept={mode === 'deep_research' ? ".pdf,.docx,.xlsx,.xls,.txt,.md,.py,.js,.java,.c,.cpp" : ".docx,.txt,.md"} />
             </div>
@@ -1271,7 +1229,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
                                 className="flex flex-col items-center justify-center p-3 rounded-xl border border-dashed border-slate-300 bg-white text-slate-400 hover:border-[var(--primary-color)] hover:text-[var(--primary-color)] hover:bg-[var(--primary-50)] transition-all"
                             >
                                 <svg className="w-6 h-6 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                                <span className="text-xs font-bold">新建功能...</span>
+                                <span className="text-xs font-bold">{t('multiDoc.template.create')}</span>
                             </button>
                         </div>
                     </div>
@@ -1281,22 +1239,22 @@ Please respond with ONLY complete prompt text, nothing else.`;
                 {mode === 'missing' && (
                     <div className="mb-6 bg-rose-50 p-4 rounded-xl border border-rose-100 flex-1 flex flex-col">
                         <div className="flex justify-between items-center mb-2">
-                            <label className="text-xs font-bold text-rose-600 uppercase tracking-wider">📋 应交名单 (Roster)</label>
+                            <label className="text-xs font-bold text-rose-600 uppercase tracking-wider">{t('multiDoc.roster.label')}</label>
                             <button 
                                 onClick={() => rosterInputRef.current?.click()}
                                 className="text-[10px] bg-white border border-rose-200 text-rose-500 px-2 py-1 rounded hover:bg-rose-100 font-bold transition-colors"
                             >
-                                📂 导入名单文档
+                                {t('multiDoc.roster.import')}
                             </button>
                             <input type="file" ref={rosterInputRef} className="hidden" onChange={handleRosterImport} accept=".txt,.docx" />
                         </div>
                         <textarea
                             value={getCurrentRosterText()}
                             onChange={(e) => setCurrentRosterText(e.target.value)}
-                            placeholder={"张三\n李四\n王五\n..."}
+                            placeholder={t('multiDoc.roster.placeholder')}
                             className="w-full flex-1 min-h-[150px] lg:min-h-0 p-3 rounded-lg border border-rose-200 text-sm focus:ring-2 focus:ring-rose-500 outline-none resize-none bg-white text-slate-700"
                         />
-                        <p className="text-[10px] text-rose-400 mt-2">* 每行一个名字，支持从 Word/Txt 导入</p>
+                        <p className="text-[10px] text-rose-400 mt-2">{t('multiDoc.roster.hint')}</p>
                     </div>
                 )}
 
@@ -1306,22 +1264,22 @@ Please respond with ONLY complete prompt text, nothing else.`;
                         <div className="flex flex-col space-y-2">
                             <div className="flex items-center text-[var(--primary-color)] font-bold text-sm">
                                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>
-                                目标格式参考:
+                                {t('multiDoc.renamePattern.label')}
                             </div>
                             <input
                                 type="text"
                                 value={getCurrentRenamePattern()}
                                 onChange={(e) => setCurrentRenamePattern(e.target.value)}
-                                placeholder="例如: 20260101_张三_第一次作业_作业内容.docx"
+                                placeholder={t('multiDoc.renamePattern.placeholder')}
                                 className="w-full px-4 py-2 rounded-lg border border-[var(--primary-color)] border-opacity-40 bg-white text-sm focus:ring-2 focus:ring-[var(--primary-color)] outline-none text-slate-900"
                             />
                             {/* Sample Pill */}
                             <div className="pt-1">
                                 <button
-                                    onClick={() => setCurrentRenamePattern('20260101_张三_第一次作业_作业内容.docx')}
+                                    onClick={() => setCurrentRenamePattern(t('multiDoc.renamePattern.sample'))}
                                     className="text-[10px] bg-white border border-[var(--primary-color)] border-opacity-40 text-[var(--primary-color)] px-2 py-0.5 rounded hover:bg-[var(--primary-color)] hover:text-white transition-all"
                                 >
-                                    填充示例: 20260101_张三...
+                                    {t('multiDoc.renamePattern.fillSample')}
                                 </button>
                             </div>
                         </div>
@@ -1332,8 +1290,8 @@ Please respond with ONLY complete prompt text, nothing else.`;
                 {getCurrentFiles().length > 0 ? (
                     <div className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden flex-1 flex flex-col">
                         <div className="p-3 bg-slate-100 border-b border-slate-200 font-bold text-xs text-slate-500 flex justify-between">
-                            <span>已上传文件 ({getCurrentFiles().length})</span>
-                            <button onClick={clearFiles} className="text-red-400 hover:text-red-600">清空</button>
+                            <span>{t('multiDoc.files.count', { count: getCurrentFiles().length })}</span>
+                            <button onClick={clearFiles} className="text-red-400 hover:text-red-600">{t('multiDoc.files.clear')}</button>
                         </div>
                         <div className="overflow-y-auto custom-scrollbar max-h-[300px] lg:max-h-[400px]">
                             <ul className="divide-y divide-slate-200">
@@ -1371,11 +1329,14 @@ Please respond with ONLY complete prompt text, nothing else.`;
                          <svg className="w-10 h-10 mb-2 opacity-50 group-hover:text-[var(--primary-color)] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                          </svg>
-                         <span className="text-xs">点击或拖拽上传文件 {mode === 'deep_research' ? '(支持 PDF, Docx, Excel, Code)' : ''}</span>
+                         <span className="text-xs">
+                           {t('multiDoc.files.dropHint')}
+                           {mode === 'deep_research' ? ` ${t('multiDoc.files.dropHintDeep')}` : ''}
+                         </span>
                         
                         {isDragOver && (
                             <div className="absolute inset-0 flex items-center justify-center bg-[var(--primary-color)]/10 backdrop-blur-sm z-10">
-                                <span className="text-lg font-bold text-[var(--primary-color)]">释放即可上传 📥</span>
+                                <span className="text-lg font-bold text-[var(--primary-color)]">{t('multiDoc.files.dropActive')}</span>
                             </div>
                         )}
                          
@@ -1383,7 +1344,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
                             onClick={(e) => { e.stopPropagation(); loadSampleFiles(); }}
                             className="mt-4 px-3 py-1.5 rounded-full bg-white text-[var(--primary-color)] text-xs font-bold border border-[var(--primary-color)] hover:bg-[var(--primary-color)] hover:text-white transition-all relative z-10"
                         >
-                            加载测试数据 (Samples)
+                            {t('multiDoc.samples.load')}
                         </button>
                     </div>
                 )}
@@ -1409,7 +1370,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
                                 className="px-3 py-1.5 bg-red-100 hover:bg-red-200 border border-red-300 text-red-600 text-xs font-bold rounded-lg transition-colors flex items-center"
                             >
                                 <svg className="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" /></svg>
-                                停止
+                                {t('multiDoc.action.stop')}
                             </button>
                         </div>
                     </div>
@@ -1427,7 +1388,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
                             : 'bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] hover:scale-105'
                         }`}
                     >
-                        {isProcessing ? 'AI 正在处理...' : getActionName()}
+                        {isProcessing ? t('multiDoc.action.processing') : getActionName()}
                     </button>
 
                     {mode === 'rename' && getCurrentFiles().some(f => f.status === 'done') && (
@@ -1436,7 +1397,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
                             className="w-full mt-3 py-3 rounded-xl font-bold text-[var(--primary-color)] bg-[var(--primary-50)] border border-[var(--primary-color)] hover:bg-[var(--primary-color)] hover:text-white transition-all flex items-center justify-center shadow-sm"
                         >
                             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                            📥 打包下载所有文件 (ZIP)
+                            {t('multiDoc.action.downloadZip')}
                         </button>
                     )}
                 </div>
@@ -1449,11 +1410,11 @@ Please respond with ONLY complete prompt text, nothing else.`;
                     {mode === 'missing' && (
                         <div className="h-full bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col shadow-sm">
                             <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
-                                <h4 className="font-bold text-slate-700">核对结果 (Check Result)</h4>
+                                <h4 className="font-bold text-slate-700">{t('multiDoc.check.title')}</h4>
                                 {getCurrentCheckResult() && (
                                     <div className="text-xs space-x-2">
-                                        <span className="text-green-600 font-bold">已交: {getCurrentCheckResult()!.submitted.length}</span>
-                                        <span className="text-red-500 font-bold">未交: {getCurrentCheckResult()!.missing.length}</span>
+                                        <span className="text-green-600 font-bold">{t('multiDoc.check.submitted', { count: getCurrentCheckResult()!.submitted.length })}</span>
+                                        <span className="text-red-500 font-bold">{t('multiDoc.check.missing', { count: getCurrentCheckResult()!.missing.length })}</span>
                                     </div>
                                 )}
                             </div>
@@ -1461,18 +1422,18 @@ Please respond with ONLY complete prompt text, nothing else.`;
                             {!getCurrentCheckResult() ? (
                                 <div className="flex-1 flex flex-col items-center justify-center text-slate-300">
                                     <svg className="w-16 h-16 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                    <p className="text-sm">点击左侧"开始核对名单"查看结果</p>
+                                    <p className="text-sm">{t('multiDoc.check.emptyHint')}</p>
                                 </div>
                             ) : (
                                 <div className="flex-1 overflow-y-auto p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {/* Missing Column */}
                                     <div className="border border-red-100 bg-red-50/50 rounded-xl overflow-hidden flex flex-col">
                                         <div className="bg-red-100/80 px-4 py-2 text-red-700 font-bold text-xs uppercase tracking-wide flex justify-between">
-                                            <span>❌ 未交人员 ({getCurrentCheckResult()!.missing.length})</span>
+                                            <span>{t('multiDoc.check.missingList', { count: getCurrentCheckResult()!.missing.length })}</span>
                                         </div>
                                         <div className="p-3 overflow-y-auto max-h-[300px] custom-scrollbar">
                                             {getCurrentCheckResult()!.missing.length === 0 ? (
-                                                <div className="text-green-500 text-sm text-center py-4">全员已交！🎉</div>
+                                                <div className="text-green-500 text-sm text-center py-4">{t('multiDoc.check.allSubmitted')}</div>
                                             ) : (
                                                 <ul className="space-y-1">
                                                     {getCurrentCheckResult()!.missing.map((name, idx) => (
@@ -1488,7 +1449,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
                                     {/* Submitted Column */}
                                     <div className="border border-green-100 bg-green-50/50 rounded-xl overflow-hidden flex flex-col">
                                         <div className="bg-green-100/80 px-4 py-2 text-green-700 font-bold text-xs uppercase tracking-wide flex justify-between">
-                                            <span>✅ 已交人员 ({getCurrentCheckResult()!.submitted.length})</span>
+                                            <span>{t('multiDoc.check.submittedList', { count: getCurrentCheckResult()!.submitted.length })}</span>
                                         </div>
                                         <div className="p-3 overflow-y-auto max-h-[300px] custom-scrollbar">
                                             <ul className="space-y-2">
@@ -1506,7 +1467,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
                                     {getCurrentCheckResult()!.extras.length > 0 && (
                                         <div className="md:col-span-2 border border-slate-200 bg-slate-50 rounded-xl overflow-hidden mt-2">
                                             <div className="bg-slate-200/50 px-4 py-2 text-slate-600 font-bold text-xs uppercase tracking-wide">
-                                                ❓ 未知文件 / 无法匹配 ({getCurrentCheckResult()!.extras.length})
+                                                {t('multiDoc.check.extras', { count: getCurrentCheckResult()!.extras.length })}
                                             </div>
                                             <div className="p-3">
                                                  <div className="flex flex-wrap gap-2">
@@ -1527,13 +1488,13 @@ Please respond with ONLY complete prompt text, nothing else.`;
                     {(mode === 'report' || mode === 'deep_research') && getCurrentResultReport() && (
                         <div className="h-full bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col shadow-sm">
                              <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
-                                 <h4 className="font-bold text-slate-700">{mode === 'deep_research' ? '深度调研报告' : '周报汇总'}</h4>
+                                 <h4 className="font-bold text-slate-700">{mode === 'deep_research' ? t('multiDoc.report.deepTitle') : t('multiDoc.report.weeklyTitle')}</h4>
                                  <button 
                                     onClick={handleDownloadReport}
                                     className="text-xs bg-white border border-slate-300 hover:border-[var(--primary-color)] hover:text-[var(--primary-color)] px-3 py-1.5 rounded-lg font-bold transition-all shadow-sm flex items-center"
                                  >
                                      <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                                     导出 Word
+                                     {t('multiDoc.action.exportWord')}
                                  </button>
                              </div>
                              <div className="flex-1 p-6 overflow-y-auto custom-scrollbar bg-slate-50">
@@ -1547,7 +1508,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
                     {(mode === 'report' || mode === 'deep_research') && !getCurrentResultReport() && (
                          <div className="h-full flex flex-col items-center justify-center text-slate-300 border border-slate-200 border-dashed rounded-xl">
                             <svg className="w-16 h-16 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                            <p className="text-sm">生成的报告将显示在这里</p>
+                            <p className="text-sm">{t('multiDoc.report.placeholder')}</p>
                         </div>
                     )}
                 </div>
@@ -1562,14 +1523,20 @@ Please respond with ONLY complete prompt text, nothing else.`;
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-200">
                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
                     <h3 className="font-bold text-slate-800 text-lg">
-                        配置 Prompt ({mode === 'rename' ? '智能重命名' : mode === 'report' ? '周报整合' : mode === 'deep_research' ? '深度调研' : '名单核对'})
+                        {t('multiDoc.settings.title', { mode: mode === 'rename'
+                          ? t('multiDoc.settings.mode.rename')
+                          : mode === 'report'
+                            ? t('multiDoc.settings.mode.report')
+                            : mode === 'deep_research'
+                              ? t('multiDoc.settings.mode.deepResearch')
+                              : t('multiDoc.settings.mode.missing') })}
                     </h3>
                     <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-slate-600">
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                 </div>
                 <div className="p-6">
-                    <p className="text-xs text-slate-500 mb-2">定义 AI 如何处理您的文件。保持明确的 Input/Output 指令效果最佳。</p>
+                    <p className="text-xs text-slate-500 mb-2">{t('multiDoc.settings.desc')}</p>
                     <textarea 
                         className="w-full h-64 p-4 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-[var(--primary-color)] outline-none resize-none font-mono bg-slate-50 text-slate-700 leading-relaxed shadow-inner"
                         value={tempPrompt}
@@ -1581,13 +1548,13 @@ Please respond with ONLY complete prompt text, nothing else.`;
                             onClick={() => setShowSettings(false)}
                             className="px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
                         >
-                            取消
+                            {t('common.cancel')}
                         </button>
                         <button 
                             onClick={saveSettings}
                             className="px-6 py-2.5 text-sm font-bold text-white bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] rounded-xl shadow-lg"
                         >
-                            保存配置
+                            {t('common.save')}
                         </button>
                     </div>
                 </div>
@@ -1600,27 +1567,27 @@ Please respond with ONLY complete prompt text, nothing else.`;
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-sm">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-200">
                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800 text-lg">新建调研功能</h3>
+                    <h3 className="font-bold text-slate-800 text-lg">{t('multiDoc.template.modalTitle')}</h3>
                     <button onClick={() => setIsCreatingTemplate(false)} className="text-slate-400 hover:text-slate-600">
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                 </div>
                 <div className="p-6 space-y-4">
                     <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">功能名称</label>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t('multiDoc.template.field.title')}</label>
                         <input 
                             type="text"
                             className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none bg-white"
-                            placeholder="例如：财报分析"
+                            placeholder={t('multiDoc.template.placeholder.title')}
                             value={newTemplateTitle}
                             onChange={(e) => setNewTemplateTitle(e.target.value)}
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">指令</label>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t('multiDoc.template.field.prompt')}</label>
                         <textarea 
                             className="w-full h-40 p-3 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none resize-none font-mono bg-slate-50 text-slate-700"
-                            placeholder="告诉 AI 应该如何分析上传的文档..."
+                            placeholder={t('multiDoc.template.placeholder.prompt')}
                             value={newTemplatePrompt}
                             onChange={(e) => setNewTemplatePrompt(e.target.value)}
                         ></textarea>
@@ -1641,7 +1608,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
                                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                     </svg>
-                                    AI 正在优化 Prompt...
+                                    {t('multiDoc.template.optimizeRunning')}
                                 </>
                             ) : (
                                 <>
@@ -1649,7 +1616,7 @@ Please respond with ONLY complete prompt text, nothing else.`;
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                                     </svg>
-                                    AI 优化 Prompt
+                                    {t('multiDoc.template.optimize')}
                                 </>
                             )}
                         </button>
@@ -1659,14 +1626,14 @@ Please respond with ONLY complete prompt text, nothing else.`;
                             onClick={() => setIsCreatingTemplate(false)}
                             className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
                         >
-                            取消
+                            {t('common.cancel')}
                         </button>
                         <button
                             onClick={handleCreateTemplate}
                             disabled={isOptimizingTemplatePrompt}
                             className="px-6 py-2 text-xs font-bold text-white bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            创建功能
+                            {t('multiDoc.template.createAction')}
                         </button>
                     </div>
                 </div>

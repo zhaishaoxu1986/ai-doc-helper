@@ -31,12 +31,12 @@ export const AVAILABLE_MODELS = [
 ];
 
 export const THEME_PRESETS = [
-  { id: 'blue', name: '科技蓝', color: '#2563eb', hover: '#1d4ed8', light: '#eff6ff' },
-  { id: 'indigo', name: '深邃紫', color: '#4f46e5', hover: '#4338ca', light: '#eef2ff' },
-  { id: 'violet', name: '梦幻紫', color: '#7c3aed', hover: '#6d28d9', light: '#f5f3ff' },
-  { id: 'emerald', name: '自然绿', color: '#059669', hover: '#047857', light: '#ecfdf5' },
-  { id: 'rose', name: '活力红', color: '#e11d48', hover: '#be123c', light: '#fff1f2' },
-  { id: 'amber', name: '琥珀黄', color: '#d97706', hover: '#b45309', light: '#fffbeb' },
+  { id: 'blue', color: '#2563eb', hover: '#1d4ed8', light: '#eff6ff' },
+  { id: 'indigo', color: '#4f46e5', hover: '#4338ca', light: '#eef2ff' },
+  { id: 'violet', color: '#7c3aed', hover: '#6d28d9', light: '#f5f3ff' },
+  { id: 'emerald', color: '#059669', hover: '#047857', light: '#ecfdf5' },
+  { id: 'rose', color: '#e11d48', hover: '#be123c', light: '#fff1f2' },
+  { id: 'amber', color: '#d97706', hover: '#b45309', light: '#fffbeb' },
 ];
 
 export const getEffectiveModel = (taskType: 'ocr' | 'text' = 'text'): string => {

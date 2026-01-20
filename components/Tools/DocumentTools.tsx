@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { getModelConfig } from '../../utils/settings';
 import { generateContent } from '../../utils/aiHelper';
+import { getPrompt, useI18n } from '../../utils/i18n';
 
 interface DocumentToolsProps {
   markdown: string;
@@ -9,6 +10,7 @@ interface DocumentToolsProps {
 }
 
 const DocumentTools: React.FC<DocumentToolsProps> = ({ markdown, onUpdate }) => {
+  const { locale, t } = useI18n();
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeTool, setActiveTool] = useState<string | null>(null);
 
@@ -16,7 +18,7 @@ const DocumentTools: React.FC<DocumentToolsProps> = ({ markdown, onUpdate }) => 
     // Use 'text' model config
     const config = getModelConfig('text');
     if (!config.apiKey) {
-        alert('请先在右上角用户中心配置 API Key');
+        alert(t('docTools.alert.missingApiKey'));
         return;
     }
 
@@ -27,13 +29,13 @@ const DocumentTools: React.FC<DocumentToolsProps> = ({ markdown, onUpdate }) => 
         apiKey: config.apiKey,
         model: config.model,
         baseUrl: config.baseUrl,
-        prompt: `I want you to process the following Markdown document. ${prompt}\n\nDocument Content:\n${markdown}`
+        prompt: getPrompt('docTools.wrapper', locale, { prompt, content: markdown })
       });
       
       onUpdate(newContent);
     } catch (err) {
       console.error('AI Tool Error:', err);
-      alert('AI 处理失败，请检查 API 配置或网络连接。');
+      alert(t('docTools.alert.fail'));
     } finally {
       setIsProcessing(false);
       setActiveTool(null);
@@ -43,30 +45,30 @@ const DocumentTools: React.FC<DocumentToolsProps> = ({ markdown, onUpdate }) => 
   const tools = [
     {
       id: 'pre-export',
-      title: '导出预优化 (推荐)',
-      desc: '针对 Word 转换进行深度检查，修复 LaTeX 公式空格、表格对齐及图片链接问题。',
-      prompt: 'You are an expert Markdown optimizer. Please prepare this document for high-quality Word conversion. 1. Fix LaTeX formulas: ensure inline math has $...$ with NO spaces ($x$ instead of $ x $), and block math has $$...$$. 2. Fix tables: ensure they are correctly balanced with pipes. 3. Simplify complex LaTeX environments that Word might not support. 4. Maintain original content exactly.',
+      title: t('docTools.tool.preExport.title'),
+      desc: t('docTools.tool.preExport.desc'),
+      prompt: getPrompt('docTools.preExport', locale),
       icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4'
     },
     {
       id: 'format',
-      title: '中英文排版',
-      desc: '自动修正中英文混排空格、标点符号规范。',
-      prompt: 'Please format this text correctly. Add spaces between Chinese and English characters/numbers, fix punctuation (use full-width punctuation in Chinese sentences). Do not rewrite content.',
+      title: t('docTools.tool.format.title'),
+      desc: t('docTools.tool.format.desc'),
+      prompt: getPrompt('docTools.format', locale),
       icon: 'M4 6h16M4 12h16m-7 6h7'
     },
     {
       id: 'polish',
-      title: '学术化润色',
-      desc: '将口语化表达转化为正式学术用语，提升专业感。',
-      prompt: 'Please rewrite this document to be more academic and professional. Use formal vocabulary and passive voice where appropriate. Keep all Markdown elements like tables and formulas intact.',
+      title: t('docTools.tool.polish.title'),
+      desc: t('docTools.tool.polish.desc'),
+      prompt: getPrompt('docTools.polish', locale),
       icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z'
     },
     {
       id: 'math',
-      title: '公式格式检查',
-      desc: '统一 LaTeX 语法，确保所有数学变量均进入公式模式。',
-      prompt: 'Review all mathematical formulas. Ensure consistent styling and fix any LaTeX syntax errors that might crash the rendering.',
+      title: t('docTools.tool.math.title'),
+      desc: t('docTools.tool.math.desc'),
+      prompt: getPrompt('docTools.math', locale),
       icon: 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z'
     }
   ];
@@ -77,17 +79,17 @@ const DocumentTools: React.FC<DocumentToolsProps> = ({ markdown, onUpdate }) => 
     <div className="max-w-5xl mx-auto space-y-12 pb-20">
       <div className="text-center">
         <div className="inline-block px-4 py-1.5 mb-4 rounded-full bg-[var(--primary-50)] text-[var(--primary-color)] text-xs font-bold uppercase tracking-widest">
-          Document Intelligence
+          {t('docTools.badge')}
         </div>
-        <h2 className="text-4xl font-black text-slate-900 mb-4 tracking-tight">AI 智能处理中心</h2>
+        <h2 className="text-4xl font-black text-slate-900 mb-4 tracking-tight">{t('docTools.title')}</h2>
         <div className="flex items-center justify-center space-x-2 text-slate-500 mb-6">
-            <span className="text-lg">借鉴工业级 Pandoc 转换链路，大幅提升格式准确度</span>
+            <span className="text-lg">{t('docTools.subtitle')}</span>
         </div>
         
         {/* Model Indicator */}
         <div className="inline-flex items-center px-4 py-1.5 rounded-full border border-slate-200 bg-white shadow-sm">
              <span className="w-2 h-2 rounded-full bg-green-500 mr-2 animate-pulse"></span>
-             <span className="text-xs font-bold text-slate-600">当前润色引擎: {activeConfig.modelName}</span>
+             <span className="text-xs font-bold text-slate-600">{t('docTools.currentEngine', { model: activeConfig.modelName })}</span>
         </div>
       </div>
 
@@ -126,9 +128,9 @@ const DocumentTools: React.FC<DocumentToolsProps> = ({ markdown, onUpdate }) => 
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  处理中...
+                  {t('docTools.action.processing')}
                 </span>
-              ) : '运行 AI 任务'}
+              ) : t('docTools.action.run')}
             </button>
           </div>
         ))}
@@ -143,9 +145,9 @@ const DocumentTools: React.FC<DocumentToolsProps> = ({ markdown, onUpdate }) => 
             </svg>
           </div>
           <div>
-            <h4 className="text-xl font-bold mb-2">私有化配置 (Privacy)</h4>
+            <h4 className="text-xl font-bold mb-2">{t('docTools.privacy.title')}</h4>
             <p className="text-white opacity-90 text-sm leading-relaxed max-w-2xl">
-              您在右上角配置的 API Key 仅保存在本地浏览器中，适合个人使用。如需在团队内部署，建议通过服务器环境变量（Environment Variables）注入 Key。
+              {t('docTools.privacy.desc')}
             </p>
           </div>
         </div>

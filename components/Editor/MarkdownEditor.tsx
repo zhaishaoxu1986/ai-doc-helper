@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import mammoth from 'mammoth';
 import MathEditorController, { type MathEditorHandle } from './MathEditorController';
 import TableEditorController, { type TableEditorHandle } from './TableEditorController';
@@ -6,6 +6,7 @@ import AlignEditorController from './AlignEditorController';
 import { getModelConfig } from '../../utils/settings';
 import { generateContentStream } from '../../utils/aiHelper';
 import { htmlToMarkdown } from '../../utils/converter';
+import { getPrompt, isDefaultPrompt, useI18n, type Locale } from '../../utils/i18n';
 
 interface MarkdownEditorProps {
   value: string;
@@ -27,25 +28,32 @@ interface ToolbarAction {
   title?: string;
 }
 
-const DEFAULT_TOOLS: Tool[] = [
+const TOOL_PROMPT_KEYS: Record<string, string> = {
+  'pre-export': 'markdown.preExport',
+  'polish': 'markdown.polish',
+  'translate-en': 'markdown.translateEn'
+};
+
+const buildDefaultTools = (locale: Locale, t: (key: string, vars?: Record<string, string | number>) => string): Tool[] => [
   {
     id: 'pre-export',
-    title: '导出预优化',
-    prompt: 'You are an expert Markdown optimizer. Please prepare this document for high-quality Word conversion. 1. Fix LaTeX formulas: ensure inline math has $...$ with NO spaces ($x$ instead of $ x $), and block math has $$...$$. 2. Fix tables: ensure they are correctly balanced with pipes. 3. Simplify complex LaTeX environments that Word might not support. 4. Maintain original content exactly.\n\n优化后的文档应保持原有的结构和样式\n\n输出要求：\n- 只返回优化后的Markdown内容，不要添加任何解释'
+    title: t('editor.tool.preExport'),
+    prompt: getPrompt('markdown.preExport', locale)
   },
   {
     id: 'polish',
-    title: '学术化润色',
-    prompt: 'Please rewrite this document to be more academic and professional. Use formal vocabulary and passive voice where appropriate. Keep all Markdown elements like tables and formulas intact.\n\n优化后的文档应保持原有的结构和样式\n\n输出要求：\n- 只返回优化后的Markdown内容，不要添加任何解释'
+    title: t('editor.tool.polish'),
+    prompt: getPrompt('markdown.polish', locale)
   },
   {
     id: 'translate-en',
-    title: '中文翻译成英文',
-    prompt: 'Please translate the following content into professional English suitable for academic or technical documents. Maintain all Markdown structures, tables, and formulas exactly as they are.\n\n优化后的文档应保持原有的结构和样式\n\n输出要求：\n- 只返回优化后的Markdown内容，不要添加任何解释'
+    title: t('editor.tool.translateEn'),
+    prompt: getPrompt('markdown.translateEn', locale)
   }
 ];
 
 const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ value, onChange, onProcessing, onResetToDefault }) => {
+  const { locale, t } = useI18n();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mathEditorRef = useRef<MathEditorHandle>(null);
@@ -59,7 +67,8 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ value, onChange, onProc
   const [selectionRange, setSelectionRange] = useState<{start: number, end: number} | null>(null);
 
   // Tools State
-  const [tools, setTools] = useState<Tool[]>(DEFAULT_TOOLS);
+  const defaultTools = useMemo(() => buildDefaultTools(locale, t), [locale, t]);
+  const [tools, setTools] = useState<Tool[]>(defaultTools);
   
   // Edit State
   const [editingTool, setEditingTool] = useState<Tool | null>(null);
@@ -71,14 +80,14 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ value, onChange, onProc
   const [newToolPrompt, setNewToolPrompt] = useState('');
   const [isOptimizingPrompt, setIsOptimizingPrompt] = useState(false);
 
-  // 初始化历史记录，避免第一次 undo 为空
+  // Initialize history to avoid empty first undo.
   useEffect(() => {
     if (history.length === 1 && history[0] !== value) {
         setHistory([value]);
     }
   }, []);
 
-  // 加载用户自定义的 Prompts 和 Custom Tools
+  // Load user custom prompts and tools.
   useEffect(() => {
     const savedCustomToolsStr = localStorage.getItem('user_custom_tools');
     let customTools: Tool[] = [];
@@ -92,13 +101,27 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ value, onChange, onProc
         try { savedPrompts = JSON.parse(savedPromptsStr); } catch(e) { console.error(e); }
     }
 
-    const mergedDefaultTools = DEFAULT_TOOLS.map(t => ({
-        ...t,
-        prompt: savedPrompts[t.id] || t.prompt
-    }));
+    let updated = false;
+    const mergedDefaultTools = defaultTools.map(t => {
+        const promptKey = TOOL_PROMPT_KEYS[t.id];
+        const saved = savedPrompts[t.id];
+        if (saved && promptKey && isDefaultPrompt(promptKey, saved)) {
+            const nextDefault = getPrompt(promptKey, locale);
+            if (saved !== nextDefault) {
+                savedPrompts[t.id] = nextDefault;
+                updated = true;
+                return { ...t, prompt: nextDefault };
+            }
+        }
+        return { ...t, prompt: saved || t.prompt };
+    });
+
+    if (updated) {
+        localStorage.setItem('user_tool_prompts', JSON.stringify(savedPrompts));
+    }
 
     setTools([...mergedDefaultTools, ...customTools]);
-  }, []);
+  }, [defaultTools, locale]);
 
   // Track selection changes to update UI in dropdown
   const checkSelection = () => {
@@ -130,7 +153,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ value, onChange, onProc
 
   const createTool = () => {
     if (!newToolTitle.trim() || !newToolPrompt.trim()) {
-        alert("请输入功能名称和 Prompt");
+        alert(t('editor.alert.missingToolFields'));
         return;
     }
     
@@ -153,7 +176,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ value, onChange, onProc
   };
 
   const deleteTool = (id: string) => {
-    if (!confirm("确定要删除这个自定义功能吗？")) return;
+    if (!confirm(t('editor.alert.deleteToolConfirm'))) return;
     
     const updatedTools = tools.filter(t => t.id !== id);
     setTools(updatedTools);
@@ -166,32 +189,26 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ value, onChange, onProc
 
   const optimizePromptWithAI = async () => {
       if (!newToolTitle.trim()) {
-          alert('请先输入功能名称');
+          alert(t('editor.alert.missingToolTitle'));
           return;
       }
       
       const config = getModelConfig('text');
       if (!config.apiKey) {
-          alert('请先在右上角用户中心配置 API Key');
+          alert(t('editor.alert.missingApiKey'));
           return;
       }
 
       setIsOptimizingPrompt(true);
       
       try {
-          const contextPrompt = `Please help me create a professional AI prompt for a document editing tool.
-
-Tool Name: "${newToolTitle}"
-${newToolPrompt.trim() ? `User's partial idea: "${newToolPrompt}"` : ''}
-
-Requirements for prompt:
-1. It should tell AI to process selected text or full document appropriately
-2. Should maintain all Markdown structures (tables, formulas, code blocks, etc.)
-3. Should only output processed content, no explanations
-4. Keep the prompt clear and professional
-5. Language preference: ${newToolTitle.includes('中文') || newToolTitle.includes('翻译') ? 'Use Chinese where appropriate' : 'Use English'}
-
-Please respond with ONLY the complete prompt text, nothing else.`;
+      const contextPrompt = getPrompt('markdown.toolBuilder', locale, {
+          title: newToolTitle,
+          idea: newToolPrompt.trim()
+            ? t('editor.promptIdea', { idea: newToolPrompt })
+            : '',
+          languageHint: locale === 'zh' ? t('editor.languageHint.zh') : t('editor.languageHint.en')
+      });
 
           const stream = generateContentStream({
               apiKey: config.apiKey,
@@ -208,14 +225,14 @@ Please respond with ONLY the complete prompt text, nothing else.`;
 
       } catch (err) {
           console.error('AI Optimization Error:', err);
-          alert('AI 优化失败，请检查配置或网络连接。');
+          alert(t('editor.alert.optimizeFail'));
       } finally {
           setIsOptimizingPrompt(false);
       }
   };
 
   const resetToolPrompt = (id: string) => {
-    const defaultTool = DEFAULT_TOOLS.find(t => t.id === id);
+    const defaultTool = defaultTools.find(t => t.id === id);
     if (defaultTool) {
       setEditPromptValue(defaultTool.prompt);
     }
@@ -325,10 +342,10 @@ Please respond with ONLY the complete prompt text, nothing else.`;
     const textToProcess = hasSelection ? value.substring(start, end) : value;
 
     const config = getModelConfig('text');
-    if (!config.apiKey) {
-        alert('请先在右上角用户中心配置 API Key');
+      if (!config.apiKey) {
+        alert(t('editor.alert.missingApiKey'));
         return;
-    }
+      }
 
     if (onProcessing) onProcessing(true);
     setIsLocked(true); // Lock editor
@@ -366,7 +383,7 @@ Please respond with ONLY the complete prompt text, nothing else.`;
 
     } catch (err) {
       console.error('AI Tool Error:', err);
-      alert('AI 处理失败，请检查配置或网络连接。');
+      alert(t('editor.alert.aiFail'));
     } finally {
       if (onProcessing) onProcessing(false);
       setIsLocked(false);
@@ -409,7 +426,7 @@ Please respond with ONLY the complete prompt text, nothing else.`;
         updateHistory(markdown);
       } catch (err) {
         console.error("Word import error:", err);
-        alert("Word 导入失败，请确保文件格式正确。");
+        alert(t('editor.alert.wordImportFail'));
       }
     };
     reader.readAsArrayBuffer(file);
@@ -472,7 +489,7 @@ Please respond with ONLY the complete prompt text, nothing else.`;
               } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-              AI 助手
+              {t('editor.aiAssistant')}
               <svg className={`w-3 h-3 ml-1 transform transition-transform ${showAiTools ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
             </button>
             
@@ -482,14 +499,14 @@ Please respond with ONLY the complete prompt text, nothing else.`;
                 <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-100 z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
                    <div className="px-3 py-2 bg-[var(--primary-50)] border-b border-slate-100 flex flex-col gap-1">
                        <p className="text-[10px] text-[var(--primary-color)] font-medium flex items-center justify-between">
-                           <span>当前引擎: {activeConfig.modelName}</span>
+                           <span>{t('editor.currentEngine', { model: activeConfig.modelName })}</span>
                        </p>
                        
                        {selectionRange ? (
                            <div className="bg-white/80 border border-[var(--primary-color)] border-opacity-30 rounded-lg p-2 mt-1 shadow-sm">
                                <p className="text-[10px] font-bold text-[var(--primary-color)] flex items-center mb-1">
                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5 animate-pulse"></span>
-                                   已选中 {selectionRange.end - selectionRange.start} 字符 (仅处理选区)
+                                   {t('editor.selectionRange', { count: selectionRange.end - selectionRange.start })}
                                </p>
                                <div className="text-[10px] text-slate-600 font-mono bg-slate-50 rounded px-1.5 py-1 truncate border border-slate-200 opacity-80">
                                    "{displaySnippet}"
@@ -499,7 +516,7 @@ Please respond with ONLY the complete prompt text, nothing else.`;
                            <div className="mt-1 px-2 py-1 rounded border border-transparent">
                                 <p className="text-[10px] font-bold text-slate-400 flex items-center">
                                     <span className="w-1.5 h-1.5 rounded-full bg-slate-300 mr-1.5"></span>
-                                    未选择文字 (将处理全文)
+                                    {t('editor.selectionNone')}
                                 </p>
                            </div>
                        )}
@@ -522,7 +539,7 @@ Please respond with ONLY the complete prompt text, nothing else.`;
                                     setShowAiTools(false);
                                 }}
                                 className="p-1.5 rounded-md text-slate-300 hover:text-slate-600 hover:bg-slate-200 opacity-0 group-hover:opacity-100 transition-all"
-                                title="设置 Prompt"
+                                title={t('editor.action.settingsPrompt')}
                             >
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                             </button>
@@ -537,7 +554,7 @@ Please respond with ONLY the complete prompt text, nothing else.`;
                             <div className="w-5 h-5 rounded-full bg-[var(--primary-50)] flex items-center justify-center mr-2 text-[var(--primary-color)]">
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                             </div>
-                            新建自定义功能
+                            {t('editor.action.newCustomTool')}
                         </button>
                    </div>
                 </div>
@@ -555,7 +572,7 @@ Please respond with ONLY the complete prompt text, nothing else.`;
             <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
-            导入 WORD
+            {t('editor.action.importWord')}
             </button>
             <input
             type="file"
@@ -569,12 +586,12 @@ Please respond with ONLY the complete prompt text, nothing else.`;
                 onClick={onResetToDefault}
                 disabled={isLocked}
                 className="flex items-center px-3 py-1.5 rounded bg-slate-50 text-slate-600 text-[11px] font-bold border border-slate-200 hover:bg-slate-100 hover:text-slate-800 transition-all disabled:opacity-50"
-                title="恢复到默认内容"
+                title={t('editor.action.resetToDefault')}
                 >
                 <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                回归默认
+                {t('editor.action.reset')}
                 </button>
             )}
         </div>
@@ -583,7 +600,7 @@ Please respond with ONLY the complete prompt text, nothing else.`;
         ref={textareaRef}
         style={{ caretColor: '#1f2937' }}
         className={`flex-1 w-full p-8 resize-none focus:outline-none markdown-editor text-sm leading-relaxed text-slate-800 bg-[#f3f4f6] selection:bg-[var(--primary-50)] ${isLocked ? 'cursor-not-allowed opacity-80' : 'cursor-text'}`}
-        placeholder="在这里输入 Markdown 内容，或点击上方导入 Word... (支持 Ctrl+Z 撤销，支持直接粘贴截图)"
+        placeholder={t('editor.placeholder.inputMarkdown')}
         value={value}
         onChange={handleTextareaChange}
         onSelect={checkSelection}
@@ -611,13 +628,13 @@ Please respond with ONLY the complete prompt text, nothing else.`;
         <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/10 backdrop-blur-[2px]">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-200">
                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800">编辑功能: {editingTool.title}</h3>
+                    <h3 className="font-bold text-slate-800">{t('editor.modal.editTitle', { title: editingTool.title })}</h3>
                     <button onClick={() => setEditingTool(null)} className="text-slate-400 hover:text-slate-600">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                 </div>
                 <div className="p-6">
-                    <p className="text-xs text-slate-500 mb-2">您可以修改发送给 AI 的指令以微调结果：</p>
+                    <p className="text-xs text-slate-500 mb-2">{t('editor.modal.editHint')}</p>
                     <textarea 
                         className="w-full h-40 p-3 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none resize-none font-mono bg-slate-50 text-slate-700"
                         value={editPromptValue}
@@ -630,7 +647,7 @@ Please respond with ONLY the complete prompt text, nothing else.`;
                                     onClick={() => resetToolPrompt(editingTool.id)}
                                     className="text-xs text-slate-400 hover:text-[var(--primary-color)] font-medium hover:underline"
                                 >
-                                    恢复默认指令
+                                    {t('editor.modal.resetPrompt')}
                                 </button>
                             ) : (
                                 <button 
@@ -638,7 +655,7 @@ Please respond with ONLY the complete prompt text, nothing else.`;
                                     className="text-xs text-red-400 hover:text-red-600 font-medium hover:underline flex items-center"
                                 >
                                     <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                    删除此功能
+                                    {t('editor.modal.deleteTool')}
                                 </button>
                             )}
                         </div>
@@ -647,13 +664,13 @@ Please respond with ONLY the complete prompt text, nothing else.`;
                                 onClick={() => setEditingTool(null)}
                                 className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
                             >
-                                取消
+                                {t('editor.modal.cancel')}
                             </button>
                             <button 
                                 onClick={() => saveToolPrompt(editingTool.id, editPromptValue)}
                                 className="px-4 py-2 text-xs font-bold text-white bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] rounded-lg shadow-sm transition-colors"
                             >
-                                保存修改
+                                {t('editor.modal.save')}
                             </button>
                         </div>
                     </div>
@@ -666,32 +683,32 @@ Please respond with ONLY the complete prompt text, nothing else.`;
         <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/10 backdrop-blur-[2px]">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-200">
                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800">新建自定义功能</h3>
+                    <h3 className="font-bold text-slate-800">{t('editor.modal.createTitle')}</h3>
                     <button onClick={() => setIsCreating(false)} className="text-slate-400 hover:text-slate-600">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                 </div>
                 <div className="p-6 space-y-4">
                     <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">功能名称 (Title)</label>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t('editor.form.titleLabel')}</label>
                         <input 
                             type="text"
                             className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none bg-white"
-                            placeholder="例如：翻译为日文"
+                            placeholder={t('editor.form.titlePlaceholder')}
                             value={newToolTitle}
                             onChange={(e) => setNewToolTitle(e.target.value)}
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">指令 (Prompt)</label>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t('editor.form.promptLabel')}</label>
                         <textarea 
                             className="w-full h-32 p-3 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none resize-none font-mono bg-slate-50 text-slate-700"
-                            placeholder="告诉 AI 应该怎么处理您的文档..."
+                            placeholder={t('editor.form.promptPlaceholder')}
                             value={newToolPrompt}
                             onChange={(e) => setNewToolPrompt(e.target.value)}
                         ></textarea>
                         
-                        {/* AI 优化按钮 */}
+                        {/* AI Optimization Button */}
                         <button
                             onClick={optimizePromptWithAI}
                             disabled={isOptimizingPrompt}
@@ -707,7 +724,7 @@ Please respond with ONLY the complete prompt text, nothing else.`;
                                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                     </svg>
-                                    AI 正在优化 Prompt...
+                                    {t('editor.action.optimizing')}
                                 </>
                             ) : (
                                 <>
@@ -715,7 +732,7 @@ Please respond with ONLY the complete prompt text, nothing else.`;
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                                     </svg>
-                                    AI 优化 Prompt
+                                    {t('editor.action.optimizePrompt')}
                                 </>
                             )}
                         </button>
@@ -725,14 +742,14 @@ Please respond with ONLY the complete prompt text, nothing else.`;
                             onClick={() => setIsCreating(false)}
                             className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
                         >
-                            取消
+                            {t('editor.modal.cancel')}
                         </button>
                         <button
                             onClick={createTool}
                             disabled={isOptimizingPrompt}
                             className="px-6 py-2 text-xs font-bold text-white bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            创建功能
+                            {t('editor.action.createTool')}
                         </button>
                     </div>
                 </div>

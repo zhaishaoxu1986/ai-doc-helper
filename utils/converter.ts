@@ -5,6 +5,15 @@ import {
   Math as DocxMath, MathRun, ImageRun
 } from 'docx';
 import { WordTemplate, DocumentStyle } from '../types';
+import { UI_STRINGS } from './i18n-resources/uiStrings';
+import { getInitialLocale } from './i18n';
+
+const getUiString = (key: string, vars?: Record<string, string | number>): string => {
+  const locale = getInitialLocale();
+  const template = UI_STRINGS[locale]?.[key] || UI_STRINGS.zh[key] || key;
+  if (!vars) return template;
+  return template.replace(/\{\{(\w+)\}\}/g, (_, name) => String(vars[name] ?? ''));
+};
 
 /**
  * 简单的 HTML 转 Markdown 工具 (浏览器端实现，无需 Pandoc)
@@ -411,7 +420,7 @@ export async function downloadDocx(markdown: string, template: WordTemplate, cus
                             }
                         } as any),
                         new TextRun({
-                             text: `\n图: ${alt}`,
+                             text: `\n${getUiString('converter.figureCaption', { alt })}`,
                              font: style.fontFace,
                              size: (style.fontSize - 2) * 2,
                              color: "666666",
@@ -568,7 +577,7 @@ export async function downloadDocx(markdown: string, template: WordTemplate, cus
       // 添加表号和标题
       const tableCaption = new Paragraph({
         children: [new TextRun({ 
-          text: `表 ${tableCount} `, 
+          text: `${getUiString('converter.tableLabel', { count: tableCount })} `,
           font: style.fontFace, 
           size: (style.fontSize - 1) * 2, 
           color: "000000",
@@ -669,7 +678,7 @@ export async function downloadDocx(markdown: string, template: WordTemplate, cus
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
   } catch (error) {
-    console.error('Word文档生成失败:', error);
-    throw new Error(`Word文档生成失败：${error instanceof Error ? error.message : JSON.stringify(error)}`);
+    console.error(getUiString('converter.error.wordDocFail', { message: error instanceof Error ? error.message : JSON.stringify(error) }));
+    throw new Error(getUiString('converter.error.wordDocFail', { message: error instanceof Error ? error.message : JSON.stringify(error) }));
   }
 }

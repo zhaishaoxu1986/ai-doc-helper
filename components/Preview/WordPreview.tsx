@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { WordTemplate, DocumentStyle } from '../../types';
 import { downloadDocx } from '../../utils/converter';
+import { useI18n } from '../../utils/i18n';
 
 interface WordPreviewProps {
   markdown: string;
@@ -48,7 +49,7 @@ const stripAlignMarker = (children: React.ReactNode): { align?: AlignMarker; chi
   return { align, children: nextNodes };
 };
 
-const CodeBlock = ({ node, className, children, ...props }: any) => {
+const CodeBlock = ({ className, children, labels, ...props }: any) => {
     const [copied, setCopied] = useState(false);
     const inline = props.inline;
     const match = /language-(\w+)/.exec(className || '');
@@ -79,7 +80,7 @@ const CodeBlock = ({ node, className, children, ...props }: any) => {
                     {copied ? (
                         <>
                             <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                            Copied
+                            {labels.copied}
                         </>
                     ) : (
                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
@@ -91,6 +92,7 @@ const CodeBlock = ({ node, className, children, ...props }: any) => {
 };
 
 const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progress }) => {
+  const { t } = useI18n();
   const [template, setTemplate] = useState<WordTemplate>(WordTemplate.STANDARD);
   const [scale, setScale] = useState(1);
   const [copyStatus, setCopyStatus] = useState(false);
@@ -173,6 +175,8 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
     };
   }, [markdown]);
 
+  const codeLabels = useMemo(() => ({ copied: t('preview.code.copied') }), [t]);
+
   const getTemplateStyles = () => {
     // If Custom template selected, use inline styles roughly approximating the docx settings for preview
     if (template === WordTemplate.CUSTOM) {
@@ -211,7 +215,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
   const handleExportPDF = () => {
       const content = document.getElementById(previewContentId);
       if (!content) {
-          alert('无法获取预览内容，请刷新重试');
+          alert(t('preview.alert.previewUnavailable'));
           return;
       }
 
@@ -245,7 +249,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
         <!DOCTYPE html>
         <html>
           <head>
-            <title>AI Doc Helper - Export PDF</title>
+            <title>${t('preview.exportPdf.title')}</title>
             ${styleTags}
             <style>
                body { background: white; margin: 0; padding: 0; }
@@ -306,7 +310,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
             setCopyStatus(true);
             setTimeout(() => setCopyStatus(false), 2000);
         } catch (err) {
-            alert('复制失败，请尝试手动复制');
+            alert(t('preview.alert.copyFail'));
         }
         
         selection.removeAllRanges();
@@ -330,7 +334,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                   setScale(newScale);
                 }}
                 className="w-[80px] text-xs border border-slate-300 rounded-md px-2 py-1 pr-8 focus:outline-none focus:ring-1 focus:ring-[var(--primary-color)]"
-                placeholder="缩放"
+                placeholder={t('preview.scale')}
               />
               <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs font-semibold text-[var(--primary-color)]">
                 %
@@ -345,10 +349,10 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                 onChange={(e) => setTemplate(e.target.value as WordTemplate)}
                 className="text-xs bg-slate-50 border border-slate-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[var(--primary-color)] font-medium text-slate-700 w-full max-w-[150px]"
               >
-                <option value={WordTemplate.STANDARD}>📄 标准公文</option>
-                <option value={WordTemplate.ACADEMIC}>🎓 学术论文</option>
-                <option value={WordTemplate.NOTE}>📝 简洁笔记</option>
-                <option value={WordTemplate.CUSTOM}>⚙️ 自定义...</option>
+                <option value={WordTemplate.STANDARD}>📄 {t('preview.template.standard')}</option>
+                <option value={WordTemplate.ACADEMIC}>🎓 {t('preview.template.academic')}</option>
+                <option value={WordTemplate.NOTE}>📝 {t('preview.template.note')}</option>
+                <option value={WordTemplate.CUSTOM}>⚙️ {t('preview.template.custom')}</option>
               </select>
 
               {template === WordTemplate.CUSTOM && (
@@ -365,23 +369,23 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
         {/* Style Panel Popover */}
         {showStylePanel && template === WordTemplate.CUSTOM && (
             <div className="absolute top-full left-10 mt-2 bg-white rounded-xl shadow-xl border border-slate-200 p-4 z-50 w-[420px] animate-in fade-in slide-in-from-top-2 max-h-[70vh] overflow-y-auto">
-                <h4 className="text-xs font-bold text-slate-500 mb-3 uppercase">Word 导出样式配置</h4>
+                <h4 className="text-xs font-bold text-slate-500 mb-3 uppercase">{t('preview.stylePanel.title')}</h4>
                 
                 {/* 字体大小换算说明 */}
                 <div className="mb-4 p-2 bg-blue-50 border border-blue-100 rounded-lg">
                     <p className="text-[10px] text-blue-700">
-                        <strong>字体大小换算：</strong>
-                        小二 = 18pt, 小三 = 15pt，小四 = 12pt，五号 = 10.5pt，小五号 = 9pt，六号 = 7.5pt
+                        <strong>{t('preview.fontSizeGuide.title')}</strong>
+                        {t('preview.fontSizeGuide.detail')}
                     </p>
                 </div>
                 
                 {/* 一级标题样式 */}
                 <div className="mb-4 pb-3 border-b border-slate-100">
-                    <h5 className="text-xs font-bold text-[var(--primary-color)] mb-2">一级标题</h5>
+                    <h5 className="text-xs font-bold text-[var(--primary-color)] mb-2">{t('preview.heading.level1')}</h5>
                     <div className="space-y-3">
                         <div className="grid grid-cols-2 gap-2">
                             <div>
-                                <label className="text-xs text-slate-700 font-medium block mb-1">字体 (Font)</label>
+                                <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.font')}</label>
                                 <select 
                                     value={customStyle.heading1.fontFace}
                                     onChange={(e) => {
@@ -390,14 +394,14 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                                     }}
                                     className="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none"
                                 >
-                                    <option value="SimSun">宋体 (SimSun)</option>
-                                    <option value="Microsoft YaHei">微软雅黑</option>
+                                    <option value="SimSun">{t('preview.font.simsun')}</option>
+                                    <option value="Microsoft YaHei">{t('preview.font.msyh')}</option>
                                     <option value="Times New Roman">Times New Roman</option>
-                                    <option value="KaiTi">楷体</option>
+                                    <option value="KaiTi">{t('preview.font.kaiti')}</option>
                                 </select>
                             </div>
                             <div>
-                                <label className="text-xs text-slate-700 font-medium block mb-1">字号 (pt)</label>
+                                <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.fontSize')}</label>
                                 <div className="flex items-center space-x-2">
                                     <input
                                         type="number"
@@ -410,14 +414,14 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                                             setTemplate(WordTemplate.CUSTOM);
                                         }}
                                         className="flex-1 text-xs p-2 border border-slate-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none"
-                                        placeholder="字号 (pt)"
+                                        placeholder={t('preview.label.fontSize')}
                                     />
                                     <span className="text-xs text-slate-500">pt</span>
                                 </div>
                             </div>
                         </div>
                         <div>
-                            <label className="text-xs text-slate-700 font-medium block mb-1">对齐方式</label>
+                            <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.alignment')}</label>
                             <select 
                                 value={customStyle.heading1.alignment}
                                 onChange={(e) => {
@@ -426,14 +430,14 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                                 }}
                                 className="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none"
                             >
-                                <option value="center">居中对齐</option>
-                                <option value="left">左对齐</option>
-                                <option value="right">右对齐</option>
+                                <option value="center">{t('preview.align.center')}</option>
+                                <option value="left">{t('preview.align.left')}</option>
+                                <option value="right">{t('preview.align.right')}</option>
                             </select>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                             <div>
-                                <label className="text-xs text-slate-700 font-medium block mb-1">段前间距 (磅)</label>
+                                <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.spacingBefore')}</label>
                                 <input 
                                     type="number"
                                     value={customStyle.heading1.spacing.before}
@@ -445,7 +449,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                                 />
                             </div>
                             <div>
-                                <label className="text-xs text-slate-700 font-medium block mb-1">段后间距 (磅)</label>
+                                <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.spacingAfter')}</label>
                                 <input 
                                     type="number"
                                     value={customStyle.heading1.spacing.after}
@@ -458,7 +462,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                             </div>
                         </div>
                         <div>
-                            <label className="text-xs text-slate-700 font-medium block mb-1">标题颜色</label>
+                            <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.headingColor')}</label>
                             <input 
                                     type="color"
                                     value={`#${customStyle.heading1.color}`}
@@ -474,11 +478,11 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                 
                 {/* 二级标题样式 */}
                 <div className="mb-4 pb-3 border-b border-slate-100">
-                    <h5 className="text-xs font-bold text-[var(--primary-color)] mb-2">二级标题</h5>
+                    <h5 className="text-xs font-bold text-[var(--primary-color)] mb-2">{t('preview.heading.level2')}</h5>
                     <div className="space-y-3">
                         <div className="grid grid-cols-2 gap-2">
                             <div>
-                                <label className="text-xs text-slate-700 font-medium block mb-1">字体 (Font)</label>
+                                <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.font')}</label>
                                 <select 
                                     value={customStyle.heading2.fontFace}
                                     onChange={(e) => {
@@ -487,14 +491,14 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                                     }}
                                     className="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none"
                                 >
-                                    <option value="SimSun">宋体 (SimSun)</option>
-                                    <option value="Microsoft YaHei">微软雅黑</option>
+                                    <option value="SimSun">{t('preview.font.simsun')}</option>
+                                    <option value="Microsoft YaHei">{t('preview.font.msyh')}</option>
                                     <option value="Times New Roman">Times New Roman</option>
-                                    <option value="KaiTi">楷体</option>
+                                    <option value="KaiTi">{t('preview.font.kaiti')}</option>
                                 </select>
                             </div>
                             <div>
-                                <label className="text-xs text-slate-700 font-medium block mb-1">字号 (pt)</label>
+                                <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.fontSize')}</label>
                                 <div className="flex items-center space-x-2">
                                     <input
                                         type="number"
@@ -507,14 +511,14 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                                             setTemplate(WordTemplate.CUSTOM);
                                         }}
                                         className="flex-1 text-xs p-2 border border-slate-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none"
-                                        placeholder="字号 (pt)"
+                                        placeholder={t('preview.label.fontSize')}
                                     />
                                     <span className="text-xs text-slate-500">pt</span>
                                 </div>
                             </div>
                         </div>
                         <div>
-                            <label className="text-xs text-slate-700 font-medium block mb-1">对齐方式</label>
+                            <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.alignment')}</label>
                             <select 
                                 value={customStyle.heading2.alignment}
                                 onChange={(e) => {
@@ -523,14 +527,14 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                                 }}
                                 className="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none"
                             >
-                                <option value="left">左对齐</option>
-                                <option value="center">居中对齐</option>
-                                <option value="right">右对齐</option>
+                                <option value="left">{t('preview.align.left')}</option>
+                                <option value="center">{t('preview.align.center')}</option>
+                                <option value="right">{t('preview.align.right')}</option>
                             </select>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                             <div>
-                                <label className="text-xs text-slate-700 font-medium block mb-1">段前间距 (磅)</label>
+                                <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.spacingBefore')}</label>
                                 <input 
                                     type="number"
                                     value={customStyle.heading2.spacing.before}
@@ -542,7 +546,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                                 />
                             </div>
                             <div>
-                                <label className="text-xs text-slate-700 font-medium block mb-1">段后间距 (磅)</label>
+                                <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.spacingAfter')}</label>
                                 <input 
                                     type="number"
                                     value={customStyle.heading2.spacing.after}
@@ -555,7 +559,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                             </div>
                         </div>
                         <div>
-                            <label className="text-xs text-slate-700 font-medium block mb-1">标题颜色</label>
+                            <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.headingColor')}</label>
                             <input 
                                     type="color"
                                     value={`#${customStyle.heading2.color}`}
@@ -571,11 +575,11 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                 
                 {/* 三级标题样式 */}
                 <div className="mb-4 pb-3 border-b border-slate-100">
-                    <h5 className="text-xs font-bold text-[var(--primary-color)] mb-2">三级标题</h5>
+                    <h5 className="text-xs font-bold text-[var(--primary-color)] mb-2">{t('preview.heading.level3')}</h5>
                     <div className="space-y-3">
                         <div className="grid grid-cols-2 gap-2">
                             <div>
-                                <label className="text-xs text-slate-700 font-medium block mb-1">字体 (Font)</label>
+                                <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.font')}</label>
                                 <select 
                                     value={customStyle.heading3.fontFace}
                                     onChange={(e) => {
@@ -584,14 +588,14 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                                     }}
                                     className="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none"
                                 >
-                                    <option value="SimSun">宋体 (SimSun)</option>
-                                    <option value="Microsoft YaHei">微软雅黑</option>
+                                    <option value="SimSun">{t('preview.font.simsun')}</option>
+                                    <option value="Microsoft YaHei">{t('preview.font.msyh')}</option>
                                     <option value="Times New Roman">Times New Roman</option>
-                                    <option value="KaiTi">楷体</option>
+                                    <option value="KaiTi">{t('preview.font.kaiti')}</option>
                                 </select>
                             </div>
                             <div>
-                                <label className="text-xs text-slate-700 font-medium block mb-1">字号 (pt)</label>
+                                <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.fontSize')}</label>
                                 <div className="flex items-center space-x-2">
                                     <input
                                         type="number"
@@ -604,14 +608,14 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                                             setTemplate(WordTemplate.CUSTOM);
                                         }}
                                         className="flex-1 text-xs p-2 border border-slate-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none"
-                                        placeholder="字号 (pt)"
+                                        placeholder={t('preview.label.fontSize')}
                                     />
                                     <span className="text-xs text-slate-500">pt</span>
                                 </div>
                             </div>
                         </div>
                         <div>
-                            <label className="text-xs text-slate-700 font-medium block mb-1">对齐方式</label>
+                            <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.alignment')}</label>
                             <select 
                                 value={customStyle.heading3.alignment}
                                 onChange={(e) => {
@@ -620,14 +624,14 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                                 }}
                                 className="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none"
                             >
-                                <option value="left">左对齐</option>
-                                <option value="center">居中对齐</option>
-                                <option value="right">右对齐</option>
+                                <option value="left">{t('preview.align.left')}</option>
+                                <option value="center">{t('preview.align.center')}</option>
+                                <option value="right">{t('preview.align.right')}</option>
                             </select>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                             <div>
-                                <label className="text-xs text-slate-700 font-medium block mb-1">段前间距 (磅)</label>
+                                <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.spacingBefore')}</label>
                                 <input 
                                     type="number"
                                     value={customStyle.heading3.spacing.before}
@@ -639,7 +643,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                                 />
                             </div>
                             <div>
-                                <label className="text-xs text-slate-700 font-medium block mb-1">段后间距 (磅)</label>
+                                <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.spacingAfter')}</label>
                                 <input 
                                     type="number"
                                     value={customStyle.heading3.spacing.after}
@@ -652,7 +656,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                             </div>
                         </div>
                         <div>
-                            <label className="text-xs text-slate-700 font-medium block mb-1">标题颜色</label>
+                            <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.headingColor')}</label>
                             <input 
                                     type="color"
                                     value={`#${customStyle.heading3.color}`}
@@ -668,10 +672,10 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                 
                 {/* 正文样式 */}
                 <div className="mb-4 pb-3 border-b border-slate-100">
-                    <h5 className="text-xs font-bold text-[var(--primary-color)] mb-2">正文样式</h5>
+                    <h5 className="text-xs font-bold text-[var(--primary-color)] mb-2">{t('preview.section.body')}</h5>
                     <div className="space-y-3">
                         <div>
-                            <label className="text-xs text-slate-700 font-medium block mb-1">字体 (Font)</label>
+                            <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.font')}</label>
                             <select 
                                     value={customStyle.fontFace}
                                     onChange={(e) => {
@@ -680,15 +684,15 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                                     }}
                                     className="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none"
                                 >
-                                <option value="SimSun">宋体 (SimSun)</option>
-                                <option value="Microsoft YaHei">微软雅黑</option>
+                                <option value="SimSun">{t('preview.font.simsun')}</option>
+                                <option value="Microsoft YaHei">{t('preview.font.msyh')}</option>
                                 <option value="Times New Roman">Times New Roman</option>
-                                <option value="KaiTi">楷体</option>
+                                <option value="KaiTi">{t('preview.font.kaiti')}</option>
                             </select>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                             <div>
-                                <label className="text-xs text-slate-700 font-medium block mb-1">字号 (pt)</label>
+                                <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.fontSize')}</label>
                                 <div className="flex items-center space-x-2">
                                     <input
                                         type="number"
@@ -701,13 +705,13 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                                             setTemplate(WordTemplate.CUSTOM);
                                         }}
                                         className="flex-1 text-xs p-2 border border-slate-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none"
-                                        placeholder="字号 (pt)"
+                                        placeholder={t('preview.label.fontSize')}
                                     />
                                     <span className="text-xs text-slate-500">pt</span>
                                 </div>
                             </div>
                             <div>
-                                <label className="text-xs text-slate-700 font-medium block mb-1">行距</label>
+                                <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.lineHeight')}</label>
                                 <input 
                                     type="number"
                                     step="0.1"
@@ -721,7 +725,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                             </div>
                         </div>
                         <div>
-                            <label className="text-xs text-slate-700 font-medium block mb-1">对齐方式</label>
+                            <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.alignment')}</label>
                             <select 
                                     value={customStyle.alignment}
                                     onChange={(e) => {
@@ -730,15 +734,15 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                                     }}
                                     className="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent outline-none"
                                 >
-                                <option value="justify">两端对齐</option>
-                                <option value="left">左对齐</option>
-                                <option value="center">居中对齐</option>
-                                <option value="right">右对齐</option>
+                                <option value="justify">{t('preview.align.justify')}</option>
+                                <option value="left">{t('preview.align.left')}</option>
+                                <option value="center">{t('preview.align.center')}</option>
+                                <option value="right">{t('preview.align.right')}</option>
                             </select>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                             <div>
-                                <label className="text-xs text-slate-700 font-medium block mb-1">段前间距 (磅)</label>
+                                <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.spacingBefore')}</label>
                                 <input 
                                     type="number"
                                     value={customStyle.paragraphSpacing.before}
@@ -750,7 +754,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                                 />
                             </div>
                             <div>
-                                <label className="text-xs text-slate-700 font-medium block mb-1">段后间距 (磅)</label>
+                                <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.spacingAfter')}</label>
                                 <input 
                                     type="number"
                                     value={customStyle.paragraphSpacing.after}
@@ -763,7 +767,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                             </div>
                         </div>
                         <div>
-                            <label className="text-xs text-slate-700 font-medium block mb-1">首行缩进 (字符)</label>
+                            <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.firstLineIndent')}</label>
                             <input 
                                 type="number"
                                 min="0"
@@ -778,7 +782,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                             />
                         </div>
                         <div>
-                            <label className="text-xs text-slate-700 font-medium block mb-1">正文颜色</label>
+                            <label className="text-xs text-slate-700 font-medium block mb-1">{t('preview.label.textColor')}</label>
                             <input 
                                     type="color"
                                     value={`#${customStyle.textColor}`}
@@ -794,7 +798,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                 
                 {/* 表格样式 */}
                 <div className="mb-4">
-                    <h5 className="text-xs font-bold text-[var(--primary-color)] mb-2">表格样式</h5>
+                    <h5 className="text-xs font-bold text-[var(--primary-color)] mb-2">{t('preview.section.table')}</h5>
                     <div className="space-y-3">
                         <div className="flex items-center space-x-2">
                             <input
@@ -809,7 +813,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                                 }}
                                 className="text-[var(--primary-color)] focus:ring-[var(--primary-color)]"
                             />
-                            <label htmlFor="threeLineTable" className="text-xs text-slate-700 font-medium">三线表</label>
+                            <label htmlFor="threeLineTable" className="text-xs text-slate-700 font-medium">{t('preview.table.threeLine')}</label>
                         </div>
                         <div className="flex items-center space-x-2">
                             <input
@@ -824,7 +828,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                                 }}
                                 className="text-[var(--primary-color)] focus:ring-[var(--primary-color)]"
                             />
-                            <label htmlFor="normalTable" className="text-xs text-slate-700 font-medium">普通表格</label>
+                            <label htmlFor="normalTable" className="text-xs text-slate-700 font-medium">{t('preview.table.normal')}</label>
                         </div>
                     </div>
                 </div>
@@ -839,18 +843,18 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                     ? 'bg-green-100 text-green-700 border-green-200' 
                     : 'bg-white text-green-600 border-green-200 hover:bg-green-50'
                 }`}
-                title="复制带有样式的 HTML 到微信公众号后台"
+                title={t('preview.action.copyWechatTitle')}
             >
                 <svg className="w-3.5 h-3.5 mr-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8.5 13.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm6.5 0c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm5.9-6c0-3.31-3.13-6-7-6s-7 2.69-7 6c0 1.77.89 3.37 2.34 4.5.21.16.27.42.15.66l-.59 1.83c-.09.28.21.53.46.39l2.12-1.2c.19-.11.41-.12.61-.04.62.24 1.28.36 1.95.36 3.87 0 7-2.69 7-6zm-16.7 8.35c-2.38-.63-4.14-2.5-4.14-4.7 0-2.88 2.87-5.2 6.4-5.2 3.53 0 6.4 2.32 6.4 5.2 0 .54-.08 1.06-.23 1.55-.38-.03-.77-.05-1.17-.05-4.32 0-7.83 2.87-7.83 6.4 0 .28.02.55.07.82-.17.06-.34.1-.51.1-1.07 0-2.07-.31-2.92-.84l-1.63.92-.45-1.41.69-1.92c-.41-.56-.68-1.22-.68-1.92z"/></svg>
-                {copyStatus ? '已复制！' : '复制公众号格式'}
+                {copyStatus ? t('preview.action.copied') : t('preview.action.copyWechat')}
             </button>
             <button 
                 onClick={handleExportPDF}
                 className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center transition-all"
-                title="导出为矢量 PDF (需在打印预览中选择 '另存为 PDF')"
+                title={t('preview.action.exportPdfTitle')}
             >
                 <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
-                PDF
+                {t('preview.action.exportPdf')}
             </button>
             <button 
                 onClick={handleDownload}
@@ -859,7 +863,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                 <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
-                Word
+                {t('preview.action.exportWord')}
             </button>
         </div>
       </div>
@@ -1019,7 +1023,7 @@ const WordPreview: React.FC<WordPreviewProps> = ({ markdown, isProcessing, progr
                   );
                 },
                 // Updated Code Block Component
-                code: CodeBlock,
+                code: (props) => <CodeBlock {...props} labels={codeLabels} />,
                 // Explicitly handle math nodes to avoid object rendering errors
                 math: ({value, children}: any) => <div className="my-4 text-center">{children || value}</div>,
                 inlineMath: ({value, children}: any) => <span className="mx-1">{children || value}</span>

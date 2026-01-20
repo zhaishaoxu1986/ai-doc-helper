@@ -1,5 +1,6 @@
-import React, { forwardRef, useImperativeHandle, useState } from 'react';
+import React, { forwardRef, useImperativeHandle, useMemo, useState } from 'react';
 import TableEditorModal, { type TableAlignment, type TableConfig, type TableEditorModalLabels } from './TableEditorModal';
+import { useI18n } from '../../utils/i18n';
 
 export interface TableEditorHandle {
   open: () => void;
@@ -10,18 +11,6 @@ interface TableEditorControllerProps {
   updateHistory: (value: string) => void;
   isLocked: boolean;
 }
-
-const TABLE_EDITOR_LABELS: TableEditorModalLabels = {
-  title: '表格编辑器',
-  columns: '列',
-  rows: '行',
-  alignment: '对齐',
-  header: '表头',
-  body: '内容',
-  clear: '清空',
-  cancel: '取消',
-  insert: '插入表格'
-};
 
 const createEmptyConfig = (columns: number, rows: number, alignments: TableAlignment[]): TableConfig => ({
   columns,
@@ -37,10 +26,22 @@ const DEFAULT_ALIGNMENTS: TableAlignment[] = ['left', 'left'];
 
 const TableEditorController = forwardRef<TableEditorHandle, TableEditorControllerProps>(
   ({ textareaRef, updateHistory, isLocked }, ref) => {
+    const { t } = useI18n();
     const [isOpen, setIsOpen] = useState(false);
     const [initialConfig, setInitialConfig] = useState<TableConfig>(
       createEmptyConfig(DEFAULT_COLUMNS, DEFAULT_ROWS, DEFAULT_ALIGNMENTS)
     );
+    const labels = useMemo<TableEditorModalLabels>(() => ({
+      title: t('tableEditor.title'),
+      columns: t('tableEditor.columns'),
+      rows: t('tableEditor.rows'),
+      alignment: t('tableEditor.alignment'),
+      header: t('tableEditor.header'),
+      body: t('tableEditor.body'),
+      clear: t('tableEditor.clear'),
+      cancel: t('tableEditor.cancel'),
+      insert: t('tableEditor.insert')
+    }), [t]);
 
     const open = () => {
       if (isLocked) return;
@@ -87,7 +88,7 @@ const TableEditorController = forwardRef<TableEditorHandle, TableEditorControlle
       <TableEditorModal
         isOpen={isOpen}
         initialConfig={initialConfig}
-        labels={TABLE_EDITOR_LABELS}
+        labels={labels}
         onClose={close}
         onInsert={handleInsert}
       />

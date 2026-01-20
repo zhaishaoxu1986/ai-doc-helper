@@ -1,5 +1,6 @@
-import React, { forwardRef, useImperativeHandle, useState } from 'react';
+import React, { forwardRef, useImperativeHandle, useMemo, useState } from 'react';
 import MathEditorModal, { type MathDisplayMode, type MathEditorModalLabels, type MathSnippetGroup } from './MathEditorModal';
+import { useI18n } from '../../utils/i18n';
 
 export interface MathEditorHandle {
   open: () => void;
@@ -11,23 +12,9 @@ interface MathEditorControllerProps {
   isLocked: boolean;
 }
 
-const MATH_EDITOR_LABELS: MathEditorModalLabels = {
-  title: '公式编辑器',
-  inputLabel: '可视化输入',
-  modeLabel: '模式',
-  inlineMode: '行内',
-  blockMode: '块级',
-  placeholder: '输入或点击下方按钮生成公式',
-  previewLabel: '预览',
-  previewEmpty: '输入公式后将显示预览',
-  clear: '清空',
-  cancel: '取消',
-  insert: '插入公式'
-};
-
 const MATH_SNIPPET_GROUPS: MathSnippetGroup[] = [
   {
-    title: '结构',
+    title: 'structure',
     items: [
       { label: 'a/b', latex: '\\frac{}{}', cursorOffset: 6 },
       { label: '√x', latex: '\\sqrt{}', cursorOffset: 6 },
@@ -46,13 +33,13 @@ const MATH_SNIPPET_GROUPS: MathSnippetGroup[] = [
     ]
   },
   {
-    title: '结构进阶',
+    title: 'advanced',
     items: [
       { label: '{cases}', latex: '\\begin{cases} \\\\ \\end{cases}', cursorOffset: 18 }
     ]
   },
   {
-    title: '文本',
+    title: 'text',
     items: [
       { label: 'text', latex: '\\text{}', cursorOffset: 6 },
       { label: 'rm', latex: '\\mathrm{}', cursorOffset: 8 },
@@ -64,7 +51,7 @@ const MATH_SNIPPET_GROUPS: MathSnippetGroup[] = [
     ]
   },
   {
-    title: '运算与关系',
+    title: 'operator',
     items: [
       { label: '±', latex: '\\pm' },
       { label: '×', latex: '\\times' },
@@ -78,7 +65,7 @@ const MATH_SNIPPET_GROUPS: MathSnippetGroup[] = [
     ]
   },
   {
-    title: '逻辑与集合',
+    title: 'logic',
     items: [
       { label: '⇒', latex: '\\Rightarrow' },
       { label: '⇔', latex: '\\Leftrightarrow' },
@@ -93,7 +80,7 @@ const MATH_SNIPPET_GROUPS: MathSnippetGroup[] = [
     ]
   },
   {
-    title: '概率统计',
+    title: 'stats',
     items: [
       { label: 'P()', latex: '\\mathbb{P}()' },
       { label: 'E()', latex: '\\mathbb{E}[]', cursorOffset: 0 },
@@ -102,7 +89,7 @@ const MATH_SNIPPET_GROUPS: MathSnippetGroup[] = [
     ]
   },
   {
-    title: '希腊字母',
+    title: 'greek',
     items: [
       { label: 'α', latex: '\\alpha' },
       { label: 'β', latex: '\\beta' },
@@ -120,10 +107,30 @@ const MATH_SNIPPET_GROUPS: MathSnippetGroup[] = [
 
 const MathEditorController = forwardRef<MathEditorHandle, MathEditorControllerProps>(
   ({ textareaRef, updateHistory, isLocked }, ref) => {
+    const { t } = useI18n();
     const [isOpen, setIsOpen] = useState(false);
     const [initialLatex, setInitialLatex] = useState('');
     const [initialDisplayMode, setInitialDisplayMode] = useState<MathDisplayMode>('block');
     const [targetRange, setTargetRange] = useState<{ start: number; end: number } | null>(null);
+    const labels = useMemo<MathEditorModalLabels>(() => ({
+      title: t('mathEditor.title'),
+      inputLabel: t('mathEditor.inputLabel'),
+      modeLabel: t('mathEditor.modeLabel'),
+      inlineMode: t('mathEditor.inlineMode'),
+      blockMode: t('mathEditor.blockMode'),
+      placeholder: t('mathEditor.placeholder'),
+      previewLabel: t('mathEditor.previewLabel'),
+      previewEmpty: t('mathEditor.previewEmpty'),
+      clear: t('mathEditor.clear'),
+      cancel: t('mathEditor.cancel'),
+      insert: t('mathEditor.insert')
+    }), [t]);
+    const groups = useMemo<MathSnippetGroup[]>(() => (
+      MATH_SNIPPET_GROUPS.map((group) => ({
+        ...group,
+        title: t(`mathEditor.group.${group.title}`)
+      }))
+    ), [t]);
 
     const parseMathSelection = (selected: string) => {
       const trimmed = selected.trim();
@@ -170,7 +177,7 @@ const MathEditorController = forwardRef<MathEditorHandle, MathEditorControllerPr
     const handleInsert = (latex: string, displayMode: MathDisplayMode) => {
       const trimmed = latex.trim();
       if (!trimmed) {
-        alert('请输入公式内容');
+        alert(t('mathEditor.alert.missingFormula'));
         return;
       }
       const textarea = textareaRef.current;
@@ -210,8 +217,8 @@ const MathEditorController = forwardRef<MathEditorHandle, MathEditorControllerPr
         initialDisplayMode={initialDisplayMode}
         onClose={close}
         onInsert={handleInsert}
-        labels={MATH_EDITOR_LABELS}
-        snippetGroups={MATH_SNIPPET_GROUPS}
+        labels={labels}
+        snippetGroups={groups}
       />
     );
   }

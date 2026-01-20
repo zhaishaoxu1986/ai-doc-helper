@@ -10,6 +10,7 @@ import { generateContent, generateContentStream } from '../../utils/aiHelper';
 import { downloadDocx } from '../../utils/converter';
 import { WordTemplate } from '../../types';
 import { addHistoryItem } from '../../utils/historyManager';
+import { getPrompt, getPromptWithLocale, useI18n } from '../../utils/i18n';
 
 // Declare globals for PDF/Excel support
 declare const pdfjsLib: any;
@@ -116,34 +117,17 @@ const FormulaOCR: React.FC<FormulaOCRProps> = ({ onResult }) => {
   
   // Settings State
   const [showPromptSettings, setShowPromptSettings] = useState(false);
-  const [formulaPrompt, setFormulaPrompt] = useState(() => localStorage.getItem('prompt_formula') || `Identify ALL mathematical formulas in the image.
-
-CRITICAL OUTPUT FORMAT:
-- You MUST output JSON with exactly this structure: { "formulas": [array of formula objects] }
-- EACH formula object MUST contain exactly 1 field: "raw"
-
-KEY RULES (VERY IMPORTANT):
-- Output ONLY the "raw" field for each formula (Plain LaTeX WITHOUT any delimiters)
-- DO NOT include $, $$, \\[ or \\] delimiters in the output
-- DO NOT create "inline", "block", or "html" fields - the system will add them automatically
-- Provide clean, pure LaTeX code
-
-Example output:
-{
-  "formulas": [
-    {
-      "raw": "E=mc^2"
-    },
-    {
-      "raw": "\\int_{0}^{\\infty} e^{-x^2} dx = \\frac{\\sqrt{\\pi}}{2}"
-    }
-  ]
-}
-
-If no formulas found, return: { "formulas": [] }`);
-  const [tablePrompt, setTablePrompt] = useState(() => localStorage.getItem('prompt_table') || 'Analyze image containing table. Output strictly content in Markdown format. Use standard Markdown tables.');
-  const [handwritingPrompt, setHandwritingPrompt] = useState(() => localStorage.getItem('prompt_handwriting') || 'Transcribe handwritten text to Markdown. Preserve lists, headings. Do not wrap in JSON.');
+  const { locale, t } = useI18n();
+  const [formulaPrompt, setFormulaPrompt] = useState(() => getPromptWithLocale('prompt_formula', 'ocr.formula', locale));
+  const [tablePrompt, setTablePrompt] = useState(() => getPromptWithLocale('prompt_table', 'ocr.table', locale));
+  const [handwritingPrompt, setHandwritingPrompt] = useState(() => getPromptWithLocale('prompt_handwriting', 'ocr.handwriting', locale));
   const [tempPrompt, setTempPrompt] = useState('');
+
+  useEffect(() => {
+    setFormulaPrompt(getPromptWithLocale('prompt_formula', 'ocr.formula', locale));
+    setTablePrompt(getPromptWithLocale('prompt_table', 'ocr.table', locale));
+    setHandwritingPrompt(getPromptWithLocale('prompt_handwriting', 'ocr.handwriting', locale));
+  }, [locale]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -331,9 +315,9 @@ If no formulas found, return: { "formulas": [] }`);
 
     ctx.fillStyle = '#000000';
     ctx.font = 'bold 32px Helvetica, Arial, sans-serif';
-    ctx.fillText('Nutrition Facts', 20, 50);
+    ctx.fillText(t('ocr.sample.nutritionFacts'), 20, 50);
     ctx.font = '24px "Noto Sans SC", sans-serif';
-    ctx.fillText('营养成分表', 20, 85);
+    ctx.fillText(t('ocr.sample.nutritionTitle'), 20, 85);
 
     ctx.lineWidth = 8;
     ctx.beginPath();
@@ -356,8 +340,8 @@ If no formulas found, return: { "formulas": [] }`);
         y += 40;
     };
 
-    drawRow('Serving Size (食用分量)', '100g', true);
-    drawRow('Calories (能量)', '2000 kJ', true);
+    drawRow(t('ocr.sample.servingSize'), '100g', true);
+    drawRow(t('ocr.sample.calories'), '2000 kJ', true);
     
     y -= 25;
     ctx.lineWidth = 4;
@@ -368,11 +352,11 @@ If no formulas found, return: { "formulas": [] }`);
     ctx.stroke();
     y += 40;
 
-    drawRow('Total Fat (脂肪)', '15 g', true);
-    drawRow('   Saturated Fat (饱和脂肪)', '2 g');
-    drawRow('Cholesterol (胆固醇)', '0 mg', true);
-    drawRow('Sodium (钠)', '160 mg', true);
-    drawRow('Total Carbohydrate (碳水)', '45 g', true);
+    drawRow(t('ocr.sample.totalFat'), '15 g', true);
+    drawRow(t('ocr.sample.saturatedFat'), '2 g');
+    drawRow(t('ocr.sample.cholesterol'), '0 mg', true);
+    drawRow(t('ocr.sample.sodium'), '160 mg', true);
+    drawRow(t('ocr.sample.totalCarb'), '45 g', true);
 
     y += 20;
     ctx.font = '14px sans-serif';
@@ -430,7 +414,7 @@ If no formulas found, return: { "formulas": [] }`);
   // Load Sample Logic
   const handleLoadSample = async () => {
       if (mode === 'pdf') {
-          alert('PDF 模式暂不支持加载示例，请手动上传 PDF 文件。');
+          alert(t('ocr.alert.pdfSampleUnsupported'));
           return;
       }
       
@@ -482,7 +466,7 @@ If no formulas found, return: { "formulas": [] }`);
            }
       } catch (e) {
           console.error("Sample generation failed", e);
-          alert("无法加载示例图片");
+          alert(t('ocr.alert.sampleLoadFail'));
       }
   };
 
@@ -499,7 +483,7 @@ If no formulas found, return: { "formulas": [] }`);
             resetResults();
           } catch (err) {
             console.error("Image processing failed", err);
-            alert("图片处理失败");
+            alert(t('ocr.alert.imageProcessFail'));
           }
         }
       }
@@ -527,7 +511,7 @@ If no formulas found, return: { "formulas": [] }`);
         resetResults();
       } catch (err) {
         console.error("Image processing failed", err);
-        alert("图片处理失败");
+        alert(t('ocr.alert.imageProcessFail'));
       }
     }
   };
@@ -541,7 +525,7 @@ If no formulas found, return: { "formulas": [] }`);
             resetResults();
         } catch (err) {
             console.error("Image processing failed", err);
-            alert("图片处理失败");
+            alert(t('ocr.alert.imageProcessFail'));
         }
     }
     if (e.target) e.target.value = '';
@@ -560,7 +544,7 @@ If no formulas found, return: { "formulas": [] }`);
         setStreamingMarkdown('');
         setPdfProgress('');
     } else {
-        alert('请选择有效的 PDF 文件');
+        alert(t('ocr.alert.invalidPdf'));
     }
     if (e.target) e.target.value = '';
   };
@@ -624,7 +608,7 @@ If no formulas found, return: { "formulas": [] }`);
           };
       } catch (e) {
           console.error('JSON Parse Error:', e);
-          throw new Error("无法解析识别结果，请重试或检查图片。");
+          throw new Error(t('ocr.alert.parseFail'));
       }
   };
 
@@ -719,7 +703,7 @@ If no formulas found, return: { "formulas": [] }`);
     const imageCounts: number[] = [];
     for (let i = 0; i < pageImages.length; i++) {
         try {
-            const prompt = `Analyze this PDF page. Count ONLY the distinct images/figures/charts (exclude logos). Respond with ONLY a single number.`;
+            const prompt = getPrompt('ocr.pdf.countImages', locale);
             const response = await generateContent({ apiKey: config.apiKey, model: config.model, baseUrl: config.baseUrl, image: pageImages[i], mimeType: 'image/jpeg', prompt });
             const match = (response as string).match(/\d+/);
             imageCounts.push(match ? parseInt(match[0]) : 0);
@@ -731,7 +715,7 @@ If no formulas found, return: { "formulas": [] }`);
   // Main Analysis Logic
   const analyzeImage = async () => {
     const config = getModelConfig('ocr');
-    if (!config.apiKey) { alert('请先在右上角用户中心配置 API Key'); return; }
+    if (!config.apiKey) { alert(t('ocr.alert.missingApiKey')); return; }
 
     setIsAnalyzing(true);
     
@@ -740,14 +724,14 @@ If no formulas found, return: { "formulas": [] }`);
         if (!pdfFile) return;
         setPdfResult(null);
         setStreamingMarkdown('');
-        setPdfProgress('正在解析 PDF...');
+        setPdfProgress(t('ocr.pdf.progress.parsing'));
         
         try {
             const images = await convertPdfToImages(pdfFile);
-            setPdfProgress(`已转换 ${images.length} 页 PDF，正在提取原生图片...`);
+            setPdfProgress(t('ocr.pdf.progress.converted', { count: images.length }));
             const pageImagesMap = await extractImagesFromPdf(pdfFile);
             
-            setPdfProgress('正在智能检测图片布局...');
+            setPdfProgress(t('ocr.pdf.progress.detecting'));
             const imageCounts = await detectImagesInPages(images);
             
             let fullMarkdown = '';
@@ -756,16 +740,16 @@ If no formulas found, return: { "formulas": [] }`);
 
             for (let i = 0; i < images.length; i++) {
                 const pageNum = i + 1;
-                setPdfProgress(`正在 AI 识别第 ${pageNum} / ${images.length} 页 (流式生成中)...`);
+                setPdfProgress(t('ocr.pdf.progress.recognizing', { current: pageNum, total: images.length }));
                 
                 const nativeImages = pageImagesMap.get(pageNum) || [];
                 const pageImageCount = Math.max(imageCounts[i], nativeImages.length);
                 let imagePromptPart = '';
                 if (pageImageCount > 0) {
-                    imagePromptPart = `\n\nIMPORTANT: This page contains ${pageImageCount} image(s). Insert ONLY placeholder ![图片X] where images appear. DO NOT describe images.`;
+                    imagePromptPart = `\n\n${getPrompt('ocr.pdf.imageHint', locale, { count: pageImageCount })}`;
                 }
 
-                const prompt = `Analyze this PDF page image. Convert to Markdown. Preserve structure, tables, and latex formulas ($...$).${imagePromptPart}\nOutput clean Markdown.`;
+                const prompt = getPrompt('ocr.pdf.pageToMarkdown', locale, { imageHint: imagePromptPart });
 
                 // Use generateContentStream for PDF pages too to show progress
                 let pageMarkdown = '';
@@ -835,13 +819,13 @@ If no formulas found, return: { "formulas": [] }`);
             }
 
             setPdfResult({ markdown: fullMarkdown, extractedImages });
-            setPdfProgress('转换完成！');
+            setPdfProgress(t('ocr.pdf.progress.done'));
             
             // 保存到统一历史记录
             addHistoryItem({
                 module: 'ocr',
                 status: 'success',
-                title: `PDF 转换 - ${pdfFile?.name}`,
+                title: t('ocr.history.pdfTitle', { name: pdfFile?.name || '' }),
                 preview: fullMarkdown.slice(0, 200) + (fullMarkdown.length > 200 ? '...' : ''),
                 fullResult: fullMarkdown,
                 metadata: {
@@ -853,8 +837,8 @@ If no formulas found, return: { "formulas": [] }`);
 
         } catch (err: any) {
             console.error('PDF Error:', err);
-            alert('PDF 转换失败: ' + err.message);
-            setPdfProgress('转换出错');
+            alert(t('ocr.pdf.alert.fail', { message: err.message }));
+            setPdfProgress(t('ocr.pdf.progress.error'));
         } finally {
             setIsAnalyzing(false);
         }
@@ -894,7 +878,7 @@ If no formulas found, return: { "formulas": [] }`);
           addHistoryItem({
               module: 'ocr',
               status: 'success',
-              title: `公式识别 - 检测到 ${result.count} 个公式`,
+              title: t('ocr.history.formulaTitle', { count: result.count }),
               preview: result.data.map(f => f.block).join('\n').slice(0, 200) + (result.data.map(f => f.block).join('\n').length > 200 ? '...' : ''),
               fullResult: JSON.stringify(result),
               metadata: {
@@ -929,7 +913,7 @@ If no formulas found, return: { "formulas": [] }`);
               addHistoryItem({
                   module: 'ocr',
                   status: 'success',
-                  title: `表格识别 - ${tableResponseText.slice(0, 30).replace(/\n/g, '')}...`,
+                  title: t('ocr.history.tableTitle', { preview: tableResponseText.slice(0, 30).replace(/\n/g, '') }),
                   preview: tableResponseText.slice(0, 200) + (tableResponseText.length > 200 ? '...' : ''),
                   fullResult: tableResponseText,
                   metadata: {
@@ -953,7 +937,7 @@ If no formulas found, return: { "formulas": [] }`);
               addHistoryItem({
                   module: 'ocr',
                   status: 'success',
-                  title: `表格识别 - ${responseText.slice(0, 30).replace(/\n/g, '')}...`,
+                  title: t('ocr.history.tableTitle', { preview: responseText.slice(0, 30).replace(/\n/g, '') }),
                   preview: responseText.slice(0, 200) + (responseText.length > 200 ? '...' : ''),
                   fullResult: responseText,
                   metadata: { ocrMode: 'table' }
@@ -986,7 +970,7 @@ If no formulas found, return: { "formulas": [] }`);
               addHistoryItem({
                   module: 'ocr',
                   status: 'success',
-                  title: `手写体识别 - ${handwritingResponseText.slice(0, 30).replace(/\n/g, '')}...`,
+                  title: t('ocr.history.handwritingTitle', { preview: handwritingResponseText.slice(0, 30).replace(/\n/g, '') }),
                   preview: handwritingResponseText.slice(0, 200) + (handwritingResponseText.length > 200 ? '...' : ''),
                   fullResult: handwritingResponseText,
                   metadata: {
@@ -1010,7 +994,7 @@ If no formulas found, return: { "formulas": [] }`);
               addHistoryItem({
                   module: 'ocr',
                   status: 'success',
-                  title: `手写体识别 - ${responseText.slice(0, 30).replace(/\n/g, '')}...`,
+                  title: t('ocr.history.handwritingTitle', { preview: responseText.slice(0, 30).replace(/\n/g, '') }),
                   preview: responseText.slice(0, 200) + (responseText.length > 200 ? '...' : ''),
                   fullResult: responseText,
                   metadata: { ocrMode: 'handwriting' }
@@ -1019,7 +1003,7 @@ If no formulas found, return: { "formulas": [] }`);
       }
     } catch (err: any) {
       console.error('OCR Error:', err);
-      alert('识别失败，请检查图片或 API 配置。');
+      alert(t('ocr.alert.recognizeFail'));
     } finally {
       setIsAnalyzing(false);
     }
@@ -1084,16 +1068,16 @@ If no formulas found, return: { "formulas": [] }`);
   return (
     <div className="p-4 lg:p-8 max-w-[1600px] mx-auto min-h-full flex flex-col" onPaste={handlePaste}>
       <div className="text-center mb-6">
-        <h2 className="text-3xl font-extrabold text-slate-900 mb-3 tracking-tight">AI 视觉识别中心 (AI Vision)</h2>
+        <h2 className="text-3xl font-extrabold text-slate-900 mb-3 tracking-tight">{t('ocr.title')}</h2>
         
         <div className="flex justify-center mb-4">
             <div className="bg-slate-100 p-1 rounded-xl inline-flex shadow-inner">
-                <button onClick={() => setMode('formula')} className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'formula' ? 'bg-white text-[var(--primary-color)] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Σ 公式识别</button>
-                <button onClick={() => setMode('table')} className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'table' ? 'bg-white text-green-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>📋 表格识别</button>
-                <button onClick={() => setMode('handwriting')} className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'handwriting' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>✍️ 手写体识别</button>
+                <button onClick={() => setMode('formula')} className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'formula' ? 'bg-white text-[var(--primary-color)] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>{t('ocr.mode.formula')}</button>
+                <button onClick={() => setMode('table')} className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'table' ? 'bg-white text-green-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>{t('ocr.mode.table')}</button>
+                <button onClick={() => setMode('handwriting')} className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'handwriting' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>{t('ocr.mode.handwriting')}</button>
                 <button onClick={() => setMode('pdf')} className={`px-5 py-2 rounded-lg text-sm font-bold transition-all flex items-center ${mode === 'pdf' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                     <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
-                    PDF 智能转换
+                    {t('ocr.mode.pdf')}
                 </button>
             </div>
         </div>
@@ -1110,8 +1094,8 @@ If no formulas found, return: { "formulas": [] }`);
                         <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mb-4 text-rose-600 mx-auto group-hover:scale-110 transition-transform">
                             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
                         </div>
-                        <h4 className="text-slate-800 font-bold text-xl mb-2">点击上传 PDF 文档</h4>
-                        <p className="text-slate-400 text-sm">支持多页 PDF 批量处理与图片提取</p>
+                        <h4 className="text-slate-800 font-bold text-xl mb-2">{t('ocr.pdf.upload.title')}</h4>
+                        <p className="text-slate-400 text-sm">{t('ocr.pdf.upload.desc')}</p>
                         <input type="file" ref={pdfInputRef} onChange={handlePdfFileChange} className="hidden" accept="application/pdf" />
                     </div>
                 </div>
@@ -1121,7 +1105,7 @@ If no formulas found, return: { "formulas": [] }`);
                         <span className="text-sm font-bold text-slate-700 truncate max-w-[200px]">{pdfFile?.name}</span>
                         <button onClick={() => { setPdfFile(null); setPdfDataUrl(null); }} className="text-slate-400 hover:text-red-500"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
                     </div>
-                    <iframe src={pdfDataUrl} className="w-full flex-1 border-0" title="PDF Preview" />
+                    <iframe src={pdfDataUrl} className="w-full flex-1 border-0" title={t('ocr.pdf.previewTitle')} />
                 </div>
               )
           ) : (
@@ -1148,13 +1132,13 @@ If no formulas found, return: { "formulas": [] }`);
                     <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 mx-auto group-hover:scale-110 transition-transform ${mode === 'table' ? 'bg-green-50 text-green-600' : mode === 'handwriting' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-400 group-hover:text-[var(--primary-color)] group-hover:bg-[var(--primary-50)]'}`}>
                         <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                     </div>
-                    <h4 className="text-slate-800 font-bold text-xl mb-2">粘贴截图、点击或拖拽上传</h4>
-                    <p className="text-slate-400 text-sm">支持 PNG/JPG (自动压缩)</p>
+                    <h4 className="text-slate-800 font-bold text-xl mb-2">{t('ocr.image.upload.title')}</h4>
+                    <p className="text-slate-400 text-sm">{t('ocr.image.upload.desc')}</p>
                     <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
                     
                     {isDragOver && (
                       <div className="absolute inset-0 flex items-center justify-center bg-[var(--primary-color)]/10 backdrop-blur-sm z-10">
-                        <span className="text-2xl font-bold text-[var(--primary-color)] animate-pulse">释放即可上传图片 📥</span>
+                        <span className="text-2xl font-bold text-[var(--primary-color)] animate-pulse">{t('ocr.image.upload.dropActive')}</span>
                       </div>
                     )}
                     
@@ -1168,7 +1152,7 @@ If no formulas found, return: { "formulas": [] }`);
                             : 'text-[var(--primary-color)] border-[var(--primary-color)] bg-white hover:bg-[var(--primary-color)] hover:text-white'
                         }`}
                     >
-                        加载测试图片 (Sample)
+                        {t('ocr.image.sample.load')}
                     </button>
                   </div>
                 )}
@@ -1182,7 +1166,7 @@ If no formulas found, return: { "formulas": [] }`);
                 className="flex-1 py-4 rounded-2xl font-bold text-lg transition-all flex items-center justify-center bg-slate-100 text-slate-600 hover:bg-slate-200 shadow-sm"
               >
                   <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                  配置 Prompt
+                  {t('ocr.promptSettings.open')}
               </button>
               <button
                 onClick={analyzeImage}
@@ -1198,9 +1182,9 @@ If no formulas found, return: { "formulas": [] }`);
                 {isAnalyzing ? (
                     <>
                         <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                        {mode === 'pdf' ? pdfProgress || 'AI 处理中...' : 'AI 识别中...'}
+                        {mode === 'pdf' ? (pdfProgress || t('ocr.status.processing')) : t('ocr.status.recognizing')}
                     </>
-                ) : (mode === 'pdf' ? '开始 PDF 全文转换' : '开始识别')}
+                ) : (mode === 'pdf' ? t('ocr.action.startPdf') : t('ocr.action.start'))}
               </button>
           </div>
         </div>
@@ -1213,12 +1197,12 @@ If no formulas found, return: { "formulas": [] }`);
                   <div className="flex justify-between items-center mb-4 pb-2 border-b border-slate-100">
                       <div className="flex space-x-2">
                           <button onClick={() => setPdfActiveTab('markdown')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${pdfActiveTab === 'markdown' ? 'bg-rose-50 text-rose-600' : 'text-slate-500 hover:bg-slate-50'}`}>Markdown</button>
-                          <button onClick={() => setPdfActiveTab('word')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${pdfActiveTab === 'word' ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50'}`}>Word 预览</button>
+                          <button onClick={() => setPdfActiveTab('word')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${pdfActiveTab === 'word' ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50'}`}>{t('ocr.pdf.tab.word')}</button>
                       </div>
                       {pdfResult && (
                           <button onClick={() => downloadDocx(pdfResult.markdown, WordTemplate.STANDARD)} className="text-xs flex items-center text-slate-500 hover:text-[var(--primary-color)]">
                               <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                              下载 Word
+                              {t('ocr.pdf.action.downloadWord')}
                           </button>
                       )}
                   </div>
@@ -1256,7 +1240,7 @@ If no formulas found, return: { "formulas": [] }`);
                                                     return <img src={`data:image/png;base64,${pdfResult.extractedImages[idx].data}`} className="max-w-full h-auto my-4 rounded shadow-md" alt={props.alt} />;
                                                 }
                                             }
-                                            return <span className="text-red-400 text-xs bg-red-50 p-1 rounded border border-red-100 block my-2">[图片显示失败: {props.alt || 'Unknown'}]</span>;
+                                            return <span className="text-red-400 text-xs bg-red-50 p-1 rounded border border-red-100 block my-2">{t('ocr.pdf.imageFail', { alt: props.alt || t('ocr.pdf.imageUnknown') })}</span>;
                                         }
                                     }}
                                   >{pdfResult.markdown}</ReactMarkdown>
@@ -1265,7 +1249,7 @@ If no formulas found, return: { "formulas": [] }`);
                       ) : !isAnalyzing && (
                           <div className="h-full flex flex-col items-center justify-center text-slate-300">
                               <svg className="w-12 h-12 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                              <p className="text-sm">转换结果将显示在这里</p>
+                              <p className="text-sm">{t('ocr.pdf.placeholder')}</p>
                           </div>
                       )}
                   </div>
@@ -1280,14 +1264,14 @@ If no formulas found, return: { "formulas": [] }`);
                     <div className="flex flex-col h-full">
                         {/* Tabs */}
                         <div className="flex bg-slate-100 p-1 rounded-xl w-fit mb-4">
-                            {mode === 'formula' && ['block', 'inline', 'raw', 'json'].map(t => (
-                                <button key={t} onClick={() => setActiveFormulaTab(t as any)} className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize ${activeFormulaTab === t ? 'bg-white shadow-sm' : 'text-slate-500'}`}>{t === 'json' ? '原始JSON' : t}</button>
+                            {mode === 'formula' && ['block', 'inline', 'raw', 'json'].map((tabKey) => (
+                                <button key={tabKey} onClick={() => setActiveFormulaTab(tabKey as any)} className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize ${activeFormulaTab === tabKey ? 'bg-white shadow-sm' : 'text-slate-500'}`}>{tabKey === 'json' ? t('ocr.tabs.rawJson') : tabKey}</button>
                             ))}
-                            {mode === 'table' && ['preview', 'markdown', 'raw'].map(t => (
-                                <button key={t} onClick={() => setActiveTableTab(t as any)} className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize ${activeTableTab === t ? 'bg-white shadow-sm' : 'text-slate-500'}`}>{t === 'raw' ? '原始输出' : t}</button>
+                            {mode === 'table' && ['preview', 'markdown', 'raw'].map((tabKey) => (
+                                <button key={tabKey} onClick={() => setActiveTableTab(tabKey as any)} className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize ${activeTableTab === tabKey ? 'bg-white shadow-sm' : 'text-slate-500'}`}>{tabKey === 'raw' ? t('ocr.tabs.rawOutput') : tabKey}</button>
                             ))}
-                            {mode === 'handwriting' && ['preview', 'markdown', 'raw'].map(t => (
-                                <button key={t} onClick={() => setActiveHandwritingTab(t as any)} className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize ${activeHandwritingTab === t ? 'bg-white shadow-sm' : 'text-slate-500'}`}>{t === 'raw' ? '原始输出' : t}</button>
+                            {mode === 'handwriting' && ['preview', 'markdown', 'raw'].map((tabKey) => (
+                                <button key={tabKey} onClick={() => setActiveHandwritingTab(tabKey as any)} className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize ${activeHandwritingTab === tabKey ? 'bg-white shadow-sm' : 'text-slate-500'}`}>{tabKey === 'raw' ? t('ocr.tabs.rawOutput') : tabKey}</button>
                             ))}
                         </div>
                         
@@ -1309,9 +1293,9 @@ If no formulas found, return: { "formulas": [] }`);
                                     {activeFormulaTab === 'json' && rawAiOutput && (
                                         <div className="bg-slate-800 text-slate-200 p-4 rounded-xl font-mono text-xs break-all overflow-auto max-h-[500px]">
                                             <div className="flex items-center justify-between mb-2">
-                                                <span className="text-xs font-bold text-amber-400">AI 原始 JSON 输出</span>
+                                                <span className="text-xs font-bold text-amber-400">{t('ocr.rawJson.title')}</span>
                                                 <button onClick={() => handleCopy(rawAiOutput, 'raw-json')} className="text-xs text-slate-400 hover:text-amber-400 transition-colors">
-                                                    {copiedItem === 'raw-json' ? '✓ 已复制' : '复制'}
+                                                    {copiedItem === 'raw-json' ? t('ocr.copy.copied') : t('ocr.copy.copy')}
                                                 </button>
                                             </div>
                                             <pre className="whitespace-pre-wrap">{rawAiOutput}</pre>
@@ -1323,16 +1307,16 @@ If no formulas found, return: { "formulas": [] }`);
                                         <>
                                             {/* 显示公式数量 */}
                                             <div className="text-center text-xs text-slate-500 bg-slate-100 py-2 rounded-lg">
-                                                共识别到 {formulaResult.count} 个公式
+                                                {t('ocr.formula.count', { count: formulaResult.count })}
                                             </div>
                                             
                                             {/* 遍历显示所有公式 */}
                                             {formulaResult.data.map((formulaData, index) => (
                                                 <div key={index} className="flex flex-col gap-3 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
                                                     <div className="flex items-center justify-between">
-                                                        <span className="text-xs font-bold text-[var(--primary-color)]">公式 #{index + 1}</span>
+                                                        <span className="text-xs font-bold text-[var(--primary-color)]">{t('ocr.formula.item', { index: index + 1 })}</span>
                                                         <button onClick={() => handleCopy(formulaData[activeFormulaTab], `formula-${index}-${activeFormulaTab}`)} className="text-xs text-slate-400 hover:text-[var(--primary-color)] transition-colors">
-                                                            {copiedItem === `formula-${index}-${activeFormulaTab}` ? '✓ 已复制' : '复制'}
+                                                            {copiedItem === `formula-${index}-${activeFormulaTab}` ? t('ocr.copy.copied') : t('ocr.copy.copy')}
                                                         </button>
                                                     </div>
                                                     
@@ -1363,12 +1347,12 @@ If no formulas found, return: { "formulas": [] }`);
                                     <div className="flex justify-center gap-2 mt-2">
                                         <button
                                             onClick={() => {
-                                                const allFormulas = formulaResult.data.map((f, i) => `公式 ${i + 1}:\n${f[activeFormulaTab]}`).join('\n\n');
+                                                const allFormulas = formulaResult.data.map((f, i) => `${t('ocr.formula.itemLabel', { index: i + 1 })}\n${f[activeFormulaTab]}`).join('\n\n');
                                                 handleCopy(allFormulas, 'all-formulas');
                                             }}
                                             className="px-4 py-2 bg-[var(--primary-color)] text-white text-xs font-bold rounded-lg hover:bg-[var(--primary-hover)] transition-colors"
                                         >
-                                            复制全部公式
+                                            {t('ocr.formula.copyAll')}
                                         </button>
                                     </div>
                                 )}
@@ -1385,7 +1369,7 @@ If no formulas found, return: { "formulas": [] }`);
                 ) : (
                     <div className="h-full flex flex-col items-center justify-center text-slate-300">
                         <svg className="w-16 h-16 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                        <p>上传图片以开始识别</p>
+                        <p>{t('ocr.empty')}</p>
                     </div>
                 )}
               </>
@@ -1405,14 +1389,14 @@ If no formulas found, return: { "formulas": [] }`);
                     }}
                     className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all ${copiedItem === `copy-content-${mode}` ? 'bg-green-50 text-green-600 border-green-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
                 >
-                    {copiedItem === `copy-content-${mode}` ? '已复制' : '复制内容'}
+                    {copiedItem === `copy-content-${mode}` ? t('ocr.copy.copied') : t('ocr.copy.content')}
                 </button>
                 <button 
                     onClick={insertContent} 
                     className="bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg transition-colors flex items-center"
                 >
                     <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                    插入编辑器
+                    {t('ocr.action.insert')}
                 </button>
              </div>
          )}
@@ -1426,19 +1410,23 @@ If no formulas found, return: { "formulas": [] }`);
                  <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
                      <h3 className="font-bold text-slate-800 text-lg flex items-center">
                          <svg className="w-5 h-5 mr-2 text-[var(--primary-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                         配置 {mode === 'formula' ? '公式识别' : mode === 'table' ? '表格识别' : '手写体识别'} Prompt
+                         {t('ocr.promptSettings.title', { mode: mode === 'formula'
+                           ? t('ocr.mode.formula')
+                           : mode === 'table'
+                             ? t('ocr.mode.table')
+                             : t('ocr.mode.handwriting') })}
                      </h3>
                      <button onClick={() => setShowPromptSettings(false)} className="text-slate-400 hover:text-slate-600">
                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                      </button>
                  </div>
                  <div className="p-6">
-                     <p className="text-xs text-slate-500 mb-4">自定义 AI 识别指令，调整识别效果。支持标准的提示词格式。</p>
+                     <p className="text-xs text-slate-500 mb-4">{t('ocr.promptSettings.desc')}</p>
                      <textarea
                          className="w-full h-64 p-4 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-[var(--primary-color)] outline-none resize-none font-mono bg-slate-50 text-slate-700 leading-relaxed shadow-inner"
                          value={tempPrompt}
                          onChange={(e) => setTempPrompt(e.target.value)}
-                         placeholder="输入自定义 Prompt..."
+                         placeholder={t('ocr.promptSettings.placeholder')}
                      ></textarea>
                  
                      <div className="mt-6 flex justify-end space-x-3">
@@ -1446,13 +1434,13 @@ If no formulas found, return: { "formulas": [] }`);
                              onClick={() => setShowPromptSettings(false)}
                              className="px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
                          >
-                             取消
+                             {t('common.cancel')}
                          </button>
                          <button
                              onClick={savePromptSettings}
                              className="px-6 py-2.5 text-sm font-bold text-white bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] rounded-xl shadow-lg"
                          >
-                             保存配置
+                             {t('common.save')}
                          </button>
                      </div>
                  </div>

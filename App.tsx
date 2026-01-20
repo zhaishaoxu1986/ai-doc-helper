@@ -8,75 +8,16 @@ import MultiDocProcessor from './components/MultiDoc/MultiDocProcessor';
 import AIResearch from './components/Research/AIResearch';
 import { AppView, DocumentState, ResearchState } from './types';
 import { getTheme } from './utils/settings';
-
-const DEFAULT_MARKDOWN = `# AI 智能文档助理使用手册
-
-这是一个专业的文档处理平台，支持将 **Markdown** 无缝转换为 **Word** 格式。
-
-### 1. 公式展示 (LaTeX)
-
-系统支持复杂的数学公式渲染，并能直接导出为 Word 原生公式对象。例如 Transformer 的核心注意力机制：
-
-$$
-\\text{Attention}(Q, K, V) = \\text{softmax}\\left(\\frac{QK^T}{\\sqrt{d_k}}\\right)V
-$$
-
-### 2. 表格支持 (Table)
-
-标准 Markdown 表格可完美转换为 Word 表格，并保持列对齐方式：
-
-| 模型 (Model) | 架构 (Architecture) | 参数 (Params) | 来源 |
-| :--- | :---: | :---: | ---: |
-| Transformer | Encoder-Decoder | 65M | Google |
-| BERT | Encoder Only | 110M/340M | Google |
-| GPT-3 | Decoder Only | 175B | OpenAI |
-| LLaMA | Decoder Only | 65B | Meta |
-
-### 3. 图片支持 (Image)
-
-支持图片嵌入，导出 Word 时会自动下载并嵌入文档（保持原始比例）：
-
-![Transformer Architecture](https://upload.wikimedia.org/wikipedia/commons/thumb/3/34/Transformer%2C_full_architecture.png/1280px-Transformer%2C_full_architecture.png)
-
-### 4. 代码支持(Code)
-
-支持代码高亮显示，导出 Word 时会保持代码块格式：
-
-\`\`\`python
-class DocHelper:
-    def __init__(self):
-        self.name = "AI Doc Helper"
-    
-    def greet(self):
-        print(f"Welcome to {self.name}!")
-\`\`\`
-
-### 5. 段落对齐 (Align)
-
-支持左对齐、居中、右对齐、两端对齐。选中文段后，在工具栏 **Align** 按钮悬浮选择即可，导出 Word 时会保持对齐方式。也可手动在段落开头添加标记（示例）：
-
-- {:align=left} 左对齐示例
-- {:align=center} 居中对齐示例
-- {:align=right} 右对齐示例
-
-删除标记即可恢复默认对齐方式。
-
-### 6. 功能特性
-
-- **AI 视觉**：截图粘贴即可识别数学公式、表格和手写体。
-- **一键排版**：自动修正中英文间距，提升专业感。
-- **公众号适配**：右侧预览区支持一键复制为微信公众号格式。
-
-
-
-> 提示：您可以随意更换上面的图片链接。点击"AI 助手"体验一键润色，支持 Ctrl+Z 撤销。`;
+import { getDefaultMarkdown, getInitialLocale, useI18n } from './utils/i18n';
 
 const App: React.FC = () => {
+  const { locale, t } = useI18n();
+  const defaultMarkdown = getDefaultMarkdown(locale);
   const [view, setView] = useState<AppView>(AppView.EDITOR);
   const [docState, setDocState] = useState<DocumentState>(() => {
     const savedMarkdown = localStorage.getItem('markeditor_content');
     return {
-      markdown: savedMarkdown || DEFAULT_MARKDOWN,
+      markdown: savedMarkdown || getDefaultMarkdown(getInitialLocale()),
       isProcessing: false,
       progress: 0
     };
@@ -118,6 +59,16 @@ const App: React.FC = () => {
     };
   }, []);
 
+  // Sync default markdown when locale changes and user hasn't modified it
+  useEffect(() => {
+    const current = docState.markdown;
+    const defaultZh = getDefaultMarkdown('zh');
+    const defaultEn = getDefaultMarkdown('en');
+    if ((current === defaultZh || current === defaultEn) && current !== defaultMarkdown) {
+      setDocState(prev => ({ ...prev, markdown: defaultMarkdown }));
+    }
+  }, [defaultMarkdown, docState.markdown]);
+
   // Save markdown to localStorage when it changes
   useEffect(() => {
     localStorage.setItem('markeditor_content', docState.markdown);
@@ -125,10 +76,10 @@ const App: React.FC = () => {
 
   // Reset to default content
   const handleResetToDefault = useCallback(() => {
-    if (confirm('确定要重置为默认内容吗？当前修改将丢失。')) {
-      setDocState(prev => ({ ...prev, markdown: DEFAULT_MARKDOWN }));
+    if (confirm(t('editor.resetConfirm'))) {
+      setDocState(prev => ({ ...prev, markdown: defaultMarkdown }));
     }
-  }, []);
+  }, [defaultMarkdown, t]);
 
   const handleMarkdownChange = (val: string) => {
     setDocState(prev => ({ ...prev, markdown: val }));
@@ -241,4 +192,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-

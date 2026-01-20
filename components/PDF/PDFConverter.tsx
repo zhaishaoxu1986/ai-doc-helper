@@ -9,6 +9,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { downloadDocx } from '../../utils/converter';
 import { WordTemplate } from '../../types';
+import { getPrompt, useI18n } from '../../utils/i18n';
 
 interface PDFConverterProps {
   onResult?: (markdown: string) => void;
@@ -29,6 +30,7 @@ interface ExtractedImage {
 }
 
 const PDFConverter: React.FC<PDFConverterProps> = ({ onResult }) => {
+  const { locale, t } = useI18n();
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfDataUrl, setPdfDataUrl] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
@@ -60,7 +62,7 @@ const PDFConverter: React.FC<PDFConverterProps> = ({ onResult }) => {
       setResult(null);
       sessionStorage.removeItem('pdfConversionResult');
     } else {
-      alert('请选择有效的 PDF 文件');
+      alert(t('pdf.alert.invalidFile'));
     }
     if (e.target) e.target.value = '';
   };
@@ -240,14 +242,7 @@ const PDFConverter: React.FC<PDFConverterProps> = ({ onResult }) => {
     
     for (let i = 0; i < pageImages.length; i++) {
       try {
-        const prompt = `Analyze this PDF page. Count ONLY the distinct images, figures, charts, diagrams, or photos that are embedded in the document content (exclude logos, headers, footers, page decorations).
-
-Respond with ONLY a single number (0, 1, 2, 3, etc.). Examples:
-- If the page has only text: 0
-- If the page has one chart: 1
-- If the page has two photos: 2
-
-Your response:`;
+        const prompt = getPrompt('pdf.countImages', locale);
         
         const response = await generateContent({
           apiKey: config.apiKey,
@@ -354,7 +349,7 @@ Your response:`;
 
     const config = getModelConfig('ocr');
     if (!config.apiKey) {
-      alert('请先在右上角用户中心配置 API Key');
+      alert(t('pdf.alert.missingApiKey'));
       return;
     }
 
@@ -383,21 +378,10 @@ Your response:`;
         
         let imagePromptPart = '';
         if (pageImageCount > 0) {
-          imagePromptPart = `\n\nIMPORTANT: This page contains ${pageImageCount} image(s). When you encounter an image/figure/chart, insert ONLY the placeholder ![图片X] at that position. DO NOT describe the image content. DO NOT write any text about the image. Just insert the placeholder and continue with other text.`;
+          imagePromptPart = `\n\n${getPrompt('ocr.pdf.imageHint', locale, { count: pageImageCount })}`;
         }
         
-        const prompt = `Analyze this PDF page image and convert it to Markdown format.
-        
-Instructions:
-- Extract all text content accurately
-- Preserve document structure (headings, paragraphs, lists)
-- Convert tables to Markdown table format
-- Preserve formatting like bold, italic, code blocks
-- If there are mathematical formulas, use LaTeX notation with $ or $$
-- DO NOT describe images. Just insert the placeholder ![图片X] where the image appears
-- Output clean Markdown only, no explanations${imagePromptPart}
-
-Page ${pageNum} of ${images.length}:`;
+        const prompt = `${getPrompt('pdf.pageToMarkdown', locale)}${imagePromptPart}\n\nPage ${pageNum} of ${images.length}:`;
 
         const pageMarkdown = await generateContent({
           apiKey: config.apiKey,
@@ -501,7 +485,7 @@ Page ${pageNum} of ${images.length}:`;
 
     } catch (err: any) {
       console.error('PDF Conversion Error:', err);
-      alert('PDF 转换失败：' + (err.message || '未知错误'));
+      alert(t('pdf.alert.convertFail', { message: err.message || t('pdf.alert.unknownError') }));
     } finally {
       setIsConverting(false);
     }
@@ -515,15 +499,15 @@ Page ${pageNum} of ${images.length}:`;
   const copyMarkdown = () => {
     if (!result?.markdown) return;
     navigator.clipboard.writeText(result.markdown).then(() => {
-      alert('Markdown 已复制到剪贴板');
+      alert(t('pdf.alert.copied'));
     });
   };
 
   return (
     <div className="h-full flex flex-col">
       <div className="text-center py-4 px-6 border-b border-slate-200 bg-white">
-        <h2 className="text-2xl font-extrabold text-slate-900 mb-1 tracking-tight">PDF 智能转换 (PDF Converter)</h2>
-        <p className="text-slate-500 text-xs">使用 AI 将 PDF 文档转换为 Markdown 和 Word 格式</p>
+        <h2 className="text-2xl font-extrabold text-slate-900 mb-1 tracking-tight">{t('pdf.title')}</h2>
+        <p className="text-slate-500 text-xs">{t('pdf.subtitle')}</p>
       </div>
 
       <div className="flex-1 flex gap-4 p-4 overflow-hidden">
@@ -537,8 +521,8 @@ Page ${pageNum} of ${images.length}:`;
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
                 </div>
-                <h4 className="text-slate-800 font-bold text-xl mb-2">点击上传 PDF 文件</h4>
-                <p className="text-slate-400 text-sm">支持 PDF 格式文档</p>
+                <h4 className="text-slate-800 font-bold text-xl mb-2">{t('pdf.upload.title')}</h4>
+                <p className="text-slate-400 text-sm">{t('pdf.upload.subtitle')}</p>
                 <input 
                   type="file" 
                   ref={fileInputRef} 
@@ -559,14 +543,14 @@ Page ${pageNum} of ${images.length}:`;
                       </svg>
                     </div>
                     <div>
-                      <h4 className="text-sm font-bold text-slate-800">{pdfFile?.name || 'PDF 预览'}</h4>
+                      <h4 className="text-sm font-bold text-slate-800">{pdfFile?.name || t('pdf.preview.title')}</h4>
                       <p className="text-xs text-slate-500">{pdfFile ? (pdfFile.size / 1024 / 1024).toFixed(2) + ' MB' : ''}</p>
                     </div>
                   </div>
                   <button 
                     onClick={() => { setPdfFile(null); setPdfDataUrl(null); setResult(null); sessionStorage.clear(); }} 
                     className="text-red-500 hover:text-red-700 p-1"
-                    title="移除文件"
+                    title={t('pdf.action.removeFile')}
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -577,7 +561,7 @@ Page ${pageNum} of ${images.length}:`;
                   <iframe 
                     src={pdfDataUrl} 
                     className="w-full h-full border-0"
-                    title="PDF Preview"
+                    title={t('pdf.preview.iframeTitle')}
                   />
                 </div>
               </div>
@@ -596,9 +580,9 @@ Page ${pageNum} of ${images.length}:`;
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    正在 AI 转换中...
+                    {t('pdf.action.converting')}
                   </span>
-                ) : result ? '已转换完成' : '开始转换 (Convert)'}
+                ) : result ? t('pdf.action.done') : t('pdf.action.start')}
               </button>
             </>
           )}
@@ -613,13 +597,13 @@ Page ${pageNum} of ${images.length}:`;
                   onClick={() => setActiveTab('markdown')}
                   className={`flex-1 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'markdown' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
-                  📝 Markdown
+                  {t('pdf.tab.markdown')}
                 </button>
                 <button 
                   onClick={() => setActiveTab('word')}
                   className={`flex-1 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'word' ? 'bg-white text-green-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
-                  📘 Word 预览
+                  {t('pdf.tab.word')}
                 </button>
               </div>
 
@@ -627,7 +611,7 @@ Page ${pageNum} of ${images.length}:`;
                 {activeTab === 'markdown' && (
                   <div className="p-4">
                     <div className="mb-2 text-xs text-slate-500 bg-slate-100 p-2 rounded">
-                      提取到 {result.extractedImages.length} 张图片
+                      {t('pdf.info.extractedImages', { count: result.extractedImages.length })}
                     </div>
                     <pre className="text-xs font-mono text-slate-700 whitespace-pre-wrap">
                       {result.markdown}
@@ -638,7 +622,7 @@ Page ${pageNum} of ${images.length}:`;
                 {activeTab === 'word' && (
                   <div className="p-4">
                     <div className="mb-2 text-xs text-slate-500 bg-slate-100 p-2 rounded">
-                      Word 预览 - 包含 {result.extractedImages.length} 张图片
+                      {t('pdf.info.wordPreviewImages', { count: result.extractedImages.length })}
                     </div>
                     <div className="prose prose-sm prose-slate max-w-none">
                       <div className="bg-white p-6 shadow-sm rounded-lg">
@@ -689,11 +673,11 @@ Page ${pageNum} of ${images.length}:`;
                                   <div key={`img-${idx}`} className="my-4 flex flex-col items-center">
                                     <img 
                                       src={`data:image/png;base64,${img.data}`} 
-                                      alt={`图片${imgNum}`}
+                                      alt={t('pdf.image.alt', { index: imgNum })}
                                       className="max-w-full h-auto rounded shadow-md border border-slate-200"
                                       style={{ maxWidth: '600px' }}
                                     />
-                                    <span className="text-xs text-slate-400 mt-2">图片{imgNum}</span>
+                                    <span className="text-xs text-slate-400 mt-2">{t('pdf.image.caption', { index: imgNum })}</span>
                                   </div>
                                 );
                               }
@@ -717,7 +701,7 @@ Page ${pageNum} of ${images.length}:`;
                     onClick={copyMarkdown}
                     className="px-4 py-2 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all"
                   >
-                    复制 Markdown
+                    {t('pdf.action.copyMarkdown')}
                   </button>
                 )}
                 {activeTab === 'word' && (
@@ -728,7 +712,7 @@ Page ${pageNum} of ${images.length}:`;
                     <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
-                    下载 Word 文件
+                    {t('pdf.action.downloadWord')}
                   </button>
                 )}
               </div>
@@ -738,7 +722,7 @@ Page ${pageNum} of ${images.length}:`;
               <svg className="w-16 h-16 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              <p>上传 PDF 文件开始转换</p>
+              <p>{t('pdf.empty')}</p>
             </div>
           )}
         </div>

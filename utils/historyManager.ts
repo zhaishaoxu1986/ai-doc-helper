@@ -1,5 +1,4 @@
-// 统一历史记录管理系统
-// 对应功能模块：AI 视觉、多文档处理、AI 调研
+// Unified history manager for app modules.
 
 export type HistoryModule = 'ocr' | 'multidoc' | 'research';
 export type HistoryStatus = 'success' | 'error' | 'processing';
@@ -10,28 +9,28 @@ export interface UnifiedHistoryItem {
   timestamp: number;
   status: HistoryStatus;
   title: string;
-  preview: string; // 显示在列表中的简短预览
-  fullResult?: string; // 完整结果数据（可能较大）
+  preview: string;
+  fullResult?: string;
   metadata: {
-    // OCR 特定字段
+    // OCR-specific fields
     ocrMode?: 'formula' | 'table' | 'handwriting' | 'pdf';
     extractedCount?: number;
     
-    // 多文档特定字段
+    // Multi-doc specific fields
     docMode?: 'deep_research' | 'report' | 'missing' | 'rename';
     fileCount?: number;
     
-    // 调研特定字段
+    // Research specific fields
     researchTopic?: string;
     logCount?: number;
     sourceCount?: number;
     
-    // 智能重命名统计字段
-    renamedCount?: number; // 成功重命名的文件数量
-    failedCount?: number; // 未能重命名的文件数量
+    // Rename stats
+    renamedCount?: number;
+    failedCount?: number;
     
-    // 通用字段
-    duration?: number; // 处理耗时（秒）
+    // Common fields
+    duration?: number;
     errorMessage?: string;
   };
 }
@@ -39,9 +38,7 @@ export interface UnifiedHistoryItem {
 const STORAGE_KEY = 'unified_history';
 const MAX_HISTORY_ITEMS = 200;
 
-/**
- * 获取所有历史记录
- */
+// Get all history items.
 export const getAllHistory = (): UnifiedHistoryItem[] => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -54,9 +51,7 @@ export const getAllHistory = (): UnifiedHistoryItem[] => {
   return [];
 };
 
-/**
- * 添加历史记录
- */
+// Add a history item.
 export const addHistoryItem = (item: Omit<UnifiedHistoryItem, 'id' | 'timestamp'>): void => {
   try {
     const allHistory = getAllHistory();
@@ -67,10 +62,10 @@ export const addHistoryItem = (item: Omit<UnifiedHistoryItem, 'id' | 'timestamp'
       timestamp: Date.now()
     };
     
-    // 添加到开头
+    // Insert at beginning
     allHistory.unshift(newItem);
     
-    // 限制数量
+    // Limit size
     if (allHistory.length > MAX_HISTORY_ITEMS) {
       allHistory.length = MAX_HISTORY_ITEMS;
     }
@@ -81,9 +76,7 @@ export const addHistoryItem = (item: Omit<UnifiedHistoryItem, 'id' | 'timestamp'
   }
 };
 
-/**
- * 删除单条历史记录
- */
+// Delete a single history item.
 export const deleteHistoryItem = (id: string): void => {
   try {
     const allHistory = getAllHistory();
@@ -94,9 +87,7 @@ export const deleteHistoryItem = (id: string): void => {
   }
 };
 
-/**
- * 清空所有历史记录
- */
+// Clear all history items.
 export const clearAllHistory = (): void => {
   try {
     localStorage.removeItem(STORAGE_KEY);
@@ -105,17 +96,13 @@ export const clearAllHistory = (): void => {
   }
 };
 
-/**
- * 按模块过滤历史记录
- */
+// Filter history by module.
 export const getHistoryByModule = (module: HistoryModule): UnifiedHistoryItem[] => {
   const allHistory = getAllHistory();
   return allHistory.filter(item => item.module === module);
 };
 
-/**
- * 更新历史记录状态
- */
+// Update history item status.
 export const updateHistoryStatus = (id: string, status: HistoryStatus, errorMessage?: string): void => {
   try {
     const allHistory = getAllHistory();
@@ -132,9 +119,7 @@ export const updateHistoryStatus = (id: string, status: HistoryStatus, errorMess
   }
 };
 
-/**
- * 获取历史记录统计信息
- */
+// Get history statistics.
 export const getHistoryStats = () => {
   const allHistory = getAllHistory();
   return {
@@ -147,10 +132,16 @@ export const getHistoryStats = () => {
   };
 };
 
-/**
- * 格式化时间戳为可读字符串
- */
-export const formatHistoryTime = (timestamp: number): string => {
+// Format timestamp to readable string.
+export type HistoryTimeLabels = {
+  justNow: string;
+  minutesAgo: (value: number) => string;
+  hoursAgo: (value: number) => string;
+  daysAgo: (value: number) => string;
+  dateLocale: string;
+};
+
+export const formatHistoryTime = (timestamp: number, labels: HistoryTimeLabels): string => {
   const now = Date.now();
   const diff = now - timestamp;
   
@@ -158,11 +149,14 @@ export const formatHistoryTime = (timestamp: number): string => {
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
   
-  if (minutes < 1) return '刚刚';
-  if (minutes < 60) return `${minutes} 分钟前`;
-  if (hours < 24) return `${hours} 小时前`;
-  if (days < 7) return `${days} 天前`;
+  if (minutes < 1) return labels.justNow;
+  if (minutes < 60) return labels.minutesAgo(minutes);
+  if (hours < 24) return labels.hoursAgo(hours);
+  if (days < 7) return labels.daysAgo(days);
   
   const date = new Date(timestamp);
-  return `${date.getMonth() + 1}/${date.getDate()}`;
+  return date.toLocaleDateString(labels.dateLocale, {
+    month: 'short',
+    day: 'numeric'
+  });
 };

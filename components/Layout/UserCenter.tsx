@@ -1,8 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { saveUserSettings, getUserSettings, AVAILABLE_MODELS, getModelConfig, THEME_PRESETS, saveTheme, getTheme, saveSerperKey } from '../../utils/settings';
+import { useI18n } from '../../utils/i18n';
 
 const UserCenter: React.FC = () => {
+  const { locale, setLocale, t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   
@@ -63,7 +65,7 @@ const UserCenter: React.FC = () => {
     const finalTextModel = useCustomTextModel ? customTextModelName.trim() : textModel;
     
     if (useCustomTextModel && !finalTextModel) {
-        alert("请输入自定义模型名称");
+        alert(t('userCenter.alert.missingCustomModel'));
         return;
     }
 
@@ -103,7 +105,7 @@ const UserCenter: React.FC = () => {
         </div>
         <div className="flex flex-col items-start">
             <span className={`text-[10px] font-bold uppercase tracking-wider ${hasKey ? 'text-slate-500' : 'text-red-500'}`}>
-                {hasKey ? 'Pro User' : 'No Key'}
+                {hasKey ? t('userCenter.badge.pro') : t('userCenter.badge.noKey')}
             </span>
         </div>
       </button>
@@ -113,17 +115,17 @@ const UserCenter: React.FC = () => {
           <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)}></div>
           <div className="absolute right-0 mt-3 w-80 bg-white rounded-[24px] shadow-2xl border border-slate-200 z-50 p-6 animate-in fade-in zoom-in duration-200 origin-top-right">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-bold text-slate-900">用户中心</h3>
+              <h3 className="text-lg font-bold text-slate-900">{t('header.userCenter')}</h3>
               <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-bold">V2.0</span>
             </div>
             
             <div className="space-y-4">
               <div className={`p-4 rounded-2xl ${hasKey ? 'bg-[var(--primary-50)]' : 'bg-red-50'}`}>
-                <p className={`text-xs font-bold uppercase mb-1 ${hasKey ? 'text-[var(--primary-color)]' : 'text-red-700'}`}>AI 引擎状态</p>
+                <p className={`text-xs font-bold uppercase mb-1 ${hasKey ? 'text-[var(--primary-color)]' : 'text-red-700'}`}>{t('userCenter.engineStatus')}</p>
                 <div className={`flex items-center ${hasKey ? 'text-[var(--primary-color)]' : 'text-red-600'}`}>
                   <div className={`w-2 h-2 rounded-full mr-2 animate-pulse ${hasKey ? 'bg-green-500' : 'bg-red-500'}`}></div>
                   <span className="text-sm font-medium truncate">
-                    {hasKey ? `当前: ${textConfig.modelName}` : '未配置有效 Key'}
+                    {hasKey ? t('userCenter.engineCurrent', { model: textConfig.modelName }) : t('userCenter.engineNoKey')}
                   </span>
                 </div>
               </div>
@@ -135,7 +137,7 @@ const UserCenter: React.FC = () => {
                 >
                     <div className="flex items-center">
                         <svg className="w-5 h-5 mr-3 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                        <span className="font-bold text-sm">配置 API Key & 主题</span>
+                        <span className="font-bold text-sm">{t('userCenter.openSettings')}</span>
                     </div>
                     <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                 </button>
@@ -152,8 +154,8 @@ const UserCenter: React.FC = () => {
             <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-lg relative z-10 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto custom-scrollbar flex flex-col">
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                     <div>
-                        <h2 className="text-xl font-black text-slate-900">个性化配置</h2>
-                        <p className="text-slate-500 text-xs mt-1">定制您的 AI 引擎与界面主题</p>
+                        <h2 className="text-xl font-black text-slate-900">{t('userCenter.settingsTitle')}</h2>
+                        <p className="text-slate-500 text-xs mt-1">{t('userCenter.settingsSubtitle')}</p>
                     </div>
                     <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600">
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -165,7 +167,7 @@ const UserCenter: React.FC = () => {
                     <div>
                         <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center">
                             <span className="bg-slate-200 text-slate-600 w-5 h-5 rounded flex items-center justify-center text-xs mr-2">1</span>
-                            主题颜色 (Theme)
+                            {t('userCenter.section.theme')}
                         </h3>
                         <div className="grid grid-cols-3 gap-3">
                             {THEME_PRESETS.map(theme => (
@@ -175,7 +177,7 @@ const UserCenter: React.FC = () => {
                                     className={`flex items-center p-2 rounded-xl border transition-all ${activeTheme === theme.id ? 'bg-[var(--primary-50)] border-[var(--primary-color)] ring-1 ring-[var(--primary-color)]' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
                                 >
                                     <div className="w-6 h-6 rounded-full shadow-sm mr-2" style={{ backgroundColor: theme.color }}></div>
-                                    <span className="text-xs font-bold text-slate-700">{theme.name}</span>
+                                    <span className="text-xs font-bold text-slate-700">{t(`theme.${theme.id}`)}</span>
                                 </button>
                             ))}
                         </div>
@@ -185,7 +187,7 @@ const UserCenter: React.FC = () => {
                     <div>
                         <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center">
                             <span className="bg-[var(--primary-50)] text-[var(--primary-color)] w-5 h-5 rounded flex items-center justify-center text-xs mr-2">2</span>
-                            主模型 (Chat/Text)
+                            {t('userCenter.section.model')}
                         </h3>
                         <div className="space-y-3">
                             {AVAILABLE_MODELS.map(model => (
@@ -221,7 +223,7 @@ const UserCenter: React.FC = () => {
                                         className="w-4 h-4 text-[var(--primary-color)] focus:ring-[var(--primary-color)]"
                                     />
                                     <div className="ml-3">
-                                        <span className="block text-sm font-bold text-slate-700">自定义模型 (Custom)</span>
+                                        <span className="block text-sm font-bold text-slate-700">{t('userCenter.section.customModel')}</span>
                                     </div>
                                 </label>
                                 {useCustomTextModel && (
@@ -230,7 +232,7 @@ const UserCenter: React.FC = () => {
                                             type="text" 
                                             value={customTextModelName}
                                             onChange={(e) => setCustomTextModelName(e.target.value)}
-                                            placeholder="输入模型 ID (如: deepseek-chat)"
+                                            placeholder={t('userCenter.placeholder.customModel')}
                                             className="w-full px-3 py-2 rounded-lg border border-[var(--primary-color)] bg-white text-sm font-mono outline-none text-slate-900"
                                         />
                                     </div>
@@ -242,34 +244,51 @@ const UserCenter: React.FC = () => {
                         <div className="mt-4 pt-4 border-t border-slate-100">
                             <div className="space-y-3">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">API Key</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">{t('userCenter.section.apiKey')}</label>
                                     <input 
                                         type="password" 
                                         value={apiKey}
                                         onChange={(e) => setApiKey(e.target.value)}
-                                        placeholder={(!apiKey && !useCustomTextModel) ? "使用预设模型的默认 Key" : "覆盖默认 Key (sk-...)"}
+                                        placeholder={(!apiKey && !useCustomTextModel) ? t('userCenter.placeholder.apiKeyDefault') : t('userCenter.placeholder.apiKeyOverride')}
                                         className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-mono placeholder:text-slate-400 focus:border-[var(--primary-color)] outline-none text-slate-900"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Base URL</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">{t('userCenter.section.baseUrl')}</label>
                                     <input 
                                         type="text" 
                                         value={baseUrl}
                                         onChange={(e) => setBaseUrl(e.target.value)}
-                                        placeholder={(!baseUrl && !useCustomTextModel) ? "使用预设模型的默认 URL" : "覆盖默认 URL"}
+                                        placeholder={(!baseUrl && !useCustomTextModel) ? t('userCenter.placeholder.baseUrlDefault') : t('userCenter.placeholder.baseUrlOverride')}
                                         className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-mono placeholder:text-slate-400 focus:border-[var(--primary-color)] outline-none text-slate-900"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Serper API Key</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">{t('userCenter.section.serperKey')}</label>
                                     <input 
                                         type="password" 
                                         value={serperKey}
                                         onChange={(e) => setSerperKey(e.target.value)}
-                                        placeholder="使用默认 Key"
+                                        placeholder={t('userCenter.placeholder.serperKey')}
                                         className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-mono placeholder:text-slate-400 focus:border-[var(--primary-color)] outline-none text-slate-900"
                                     />
+                                </div>
+                                <div className="pt-2">
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t('settings.language')}</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            onClick={() => setLocale('zh')}
+                                            className={`px-3 py-2 rounded-lg border text-sm font-bold transition-all ${locale === 'zh' ? 'bg-[var(--primary-50)] border-[var(--primary-color)] text-[var(--primary-color)]' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                                        >
+                                            {t('settings.language.zh')}
+                                        </button>
+                                        <button
+                                            onClick={() => setLocale('en')}
+                                            className={`px-3 py-2 rounded-lg border text-sm font-bold transition-all ${locale === 'en' ? 'bg-[var(--primary-50)] border-[var(--primary-color)] text-[var(--primary-color)]' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                                        >
+                                            {t('settings.language.en')}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -277,12 +296,12 @@ const UserCenter: React.FC = () => {
                 </div>
 
                 <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end space-x-3 mt-auto">
-                    <button onClick={() => setShowSettings(false)} className="px-5 py-2 text-sm font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors">取消</button>
+                    <button onClick={() => setShowSettings(false)} className="px-5 py-2 text-sm font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors">{t('userCenter.action.cancel')}</button>
                     <button 
                         onClick={handleSave}
                         className={`px-6 py-2 rounded-lg font-bold text-white shadow-md transition-all text-sm flex items-center ${isSaved ? 'bg-green-500' : 'bg-[var(--primary-color)] hover:bg-[var(--primary-hover)]'}`}
                     >
-                        {isSaved ? '已保存配置' : '保存更改'}
+                        {isSaved ? t('userCenter.action.saved') : t('userCenter.action.save')}
                     </button>
                 </div>
             </div>

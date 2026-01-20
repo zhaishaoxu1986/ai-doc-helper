@@ -7,8 +7,10 @@ import {
   getHistoryStats,
   formatHistoryTime,
   HistoryModule,
+  HistoryTimeLabels,
   UnifiedHistoryItem
 } from '../../utils/historyManager';
+import { useI18n } from '../../utils/i18n';
 
 interface HistoryPanelProps {
   isOpen: boolean;
@@ -17,6 +19,7 @@ interface HistoryPanelProps {
 }
 
 const HistoryPanel: React.FC<HistoryPanelProps> = ({ isOpen, onClose, onItemClick }) => {
+  const { locale, t } = useI18n();
   const [history, setHistory] = useState<UnifiedHistoryItem[]>([]);
   const [activeFilter, setActiveFilter] = useState<HistoryModule | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,14 +63,14 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ isOpen, onClose, onItemClic
 
   const handleDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (confirm('确定要删除这条历史记录吗？')) {
+    if (confirm(t('history.confirmDelete'))) {
       deleteHistoryItem(id);
       loadHistory();
     }
   };
 
   const handleClearAll = () => {
-    if (confirm('确定要清空所有历史记录吗？此操作不可恢复。')) {
+    if (confirm(t('history.confirmClear'))) {
       clearAllHistory();
       loadHistory();
     }
@@ -86,20 +89,20 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ isOpen, onClose, onItemClic
 
   const getModuleName = (module: HistoryModule) => {
     switch (module) {
-      case 'ocr': return 'AI 视觉';
-      case 'multidoc': return '多文档';
-      case 'research': return 'AI 调研';
+      case 'ocr': return t('history.filter.ocr');
+      case 'multidoc': return t('history.filter.multidoc');
+      case 'research': return t('history.filter.research');
     }
   };
 
   const getStatusBadge = (status: UnifiedHistoryItem['status']) => {
     switch (status) {
       case 'success':
-        return <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-[10px] font-bold">成功</span>;
+        return <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-[10px] font-bold">{t('history.status.success')}</span>;
       case 'error':
-        return <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-bold">失败</span>;
+        return <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-bold">{t('history.status.error')}</span>;
       case 'processing':
-        return <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold">处理中</span>;
+        return <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold">{t('history.status.processing')}</span>;
     }
   };
 
@@ -116,7 +119,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ isOpen, onClose, onItemClic
               <svg className="w-6 h-6 mr-2 text-[var(--primary-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              历史记录
+              {t('history.title')}
             </h2>
             <button 
               onClick={onClose}
@@ -132,19 +135,19 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ isOpen, onClose, onItemClic
           <div className="grid grid-cols-4 gap-2 mb-4">
             <div className="text-center p-2 bg-white rounded-lg border border-slate-200">
               <div className="text-lg font-black text-slate-900">{stats.total}</div>
-              <div className="text-[10px] text-slate-500 font-bold">总计</div>
+              <div className="text-[10px] text-slate-500 font-bold">{t('history.total')}</div>
             </div>
             <div className="text-center p-2 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg border border-purple-200">
               <div className="text-lg font-black text-purple-700">{stats.ocr}</div>
-              <div className="text-[10px] text-purple-600 font-bold">视觉</div>
+              <div className="text-[10px] text-purple-600 font-bold">{t('history.vision')}</div>
             </div>
             <div className="text-center p-2 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border border-blue-200">
               <div className="text-lg font-black text-blue-700">{stats.multidoc}</div>
-              <div className="text-[10px] text-blue-600 font-bold">多文档</div>
+              <div className="text-[10px] text-blue-600 font-bold">{t('history.multiDoc')}</div>
             </div>
             <div className="text-center p-2 bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg border border-emerald-200">
               <div className="text-lg font-black text-emerald-700">{stats.research}</div>
-              <div className="text-[10px] text-emerald-600 font-bold">调研</div>
+              <div className="text-[10px] text-emerald-600 font-bold">{t('history.research')}</div>
             </div>
           </div>
 
@@ -155,7 +158,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ isOpen, onClose, onItemClic
             </svg>
             <input
               type="text"
-              placeholder="搜索历史记录..."
+              placeholder={t('history.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-medium outline-none focus:border-[var(--primary-color)] focus:ring-2 focus:ring-[var(--primary-50)] transition-all"
@@ -174,7 +177,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ isOpen, onClose, onItemClic
                   : 'text-slate-500 hover:bg-slate-200'
               }`}
             >
-              全部
+              {t('history.filter.all')}
             </button>
             <button
               onClick={() => setActiveFilter('ocr')}
@@ -185,7 +188,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ isOpen, onClose, onItemClic
               }`}
             >
               <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-              AI 视觉
+              {t('history.filter.ocr')}
             </button>
             <button
               onClick={() => setActiveFilter('multidoc')}
@@ -196,7 +199,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ isOpen, onClose, onItemClic
               }`}
             >
               <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-              多文档
+              {t('history.filter.multidoc')}
             </button>
             <button
               onClick={() => setActiveFilter('research')}
@@ -207,7 +210,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ isOpen, onClose, onItemClic
               }`}
             >
               <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-              AI 调研
+              {t('history.filter.research')}
             </button>
           </div>
         </div>
@@ -219,7 +222,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ isOpen, onClose, onItemClic
               <svg className="w-16 h-16 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
               </svg>
-              <p className="text-sm font-medium">暂无历史记录</p>
+              <p className="text-sm font-medium">{t('history.empty')}</p>
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
@@ -243,7 +246,15 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ isOpen, onClose, onItemClic
                         <div className="flex items-center space-x-2 mt-1">
                           <span className="text-[10px] text-slate-500">{getModuleName(item.module)}</span>
                           <span className="text-slate-300">•</span>
-                          <span className="text-[10px] text-slate-500">{formatHistoryTime(item.timestamp)}</span>
+                          <span className="text-[10px] text-slate-500">
+                            {formatHistoryTime(item.timestamp, {
+                              justNow: t('history.time.justNow'),
+                              minutesAgo: (value) => t('history.time.minutesAgo', { value }),
+                              hoursAgo: (value) => t('history.time.hoursAgo', { value }),
+                              daysAgo: (value) => t('history.time.daysAgo', { value }),
+                              dateLocale: locale === 'zh' ? 'zh-CN' : 'en-US'
+                            } as HistoryTimeLabels)}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -273,13 +284,13 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ isOpen, onClose, onItemClic
                       </span>
                     )}
                     {item.metadata.fileCount && (
-                      <span>{item.metadata.fileCount} 个文件</span>
+                      <span>{t('history.meta.fileCount', { count: item.metadata.fileCount })}</span>
                     )}
                     {item.metadata.extractedCount && (
-                      <span>{item.metadata.extractedCount} 个公式</span>
+                      <span>{t('history.meta.extractedCount', { count: item.metadata.extractedCount })}</span>
                     )}
                     {item.metadata.duration && (
-                      <span>耗时 {item.metadata.duration}s</span>
+                      <span>{t('history.meta.duration', { seconds: item.metadata.duration })}</span>
                     )}
                   </div>
 
@@ -307,7 +318,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ isOpen, onClose, onItemClic
               onClick={handleClearAll}
               className="w-full py-2.5 rounded-xl border border-red-200 text-red-600 text-sm font-bold hover:bg-red-50 transition-colors"
             >
-              清空所有历史记录
+              {t('history.action.clearAll')}
             </button>
           </div>
         )}
